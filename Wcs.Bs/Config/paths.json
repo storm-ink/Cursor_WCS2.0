@@ -1,0 +1,54 @@
+{
+  "paths": [
+    {
+      "pathCode": "P001",
+      "source": "1001",
+      "destinationPattern": "01-*-*",
+      "steps": [
+        {
+          "stepOrder": 1,
+          "deviceType": "Conveyor",
+          "deviceCode": "CV01",
+          "routingNo": "1",
+          "segmentSource": "1001",
+          "segmentDest": "1004"
+        },
+        {
+          "stepOrder": 2,
+          "deviceType": "Crane",
+          "deviceCode": "CR01",
+          "segmentSource": "1004",
+          "segmentDest": "{Destination}"
+        }
+      ]
+    },
+    {
+      "pathCode": "P002",
+      "source": "01-*-*",
+      "destinationPattern": "2001",
+      "steps": [
+        {
+          "stepOrder": 1,
+          "deviceType": "Crane",
+          "deviceCode": "CR01",
+          "segmentSource": "{Source}",
+          "segmentDest": "1004"
+        },
+        {
+          "stepOrder": 2,
+          "deviceType": "Conveyor",
+          "deviceCode": "CV01",
+          "routingNo": "2",
+          "segmentSource": "1004",
+          "segmentDest": "2001"
+        }
+      ]
+    }
+  ],
+  "craneReachable": [
+    {
+      "deviceCode": "CR01",
+      "reachablePattern": "01-01-01:01-10-05"
+    }
+  ]
+}

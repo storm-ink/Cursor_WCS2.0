@@ -1,0 +1,25 @@
+# .NET
+Wcs.Bs/bin/
+Wcs.Bs/obj/
+Wcs.Bs/wcs.db
+Wcs.Bs/wcs.db-shm
+Wcs.Bs/wcs.db-wal
+Wcs.Bs/logs/
+
+# Node
+wcs-web/node_modules/
+wcs-web/dist/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+dotnet-install.sh
+*.log
