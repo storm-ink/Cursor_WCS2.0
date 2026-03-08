@@ -1,0 +1,6 @@
+@Wcs.Bs_HostAddress = http://localhost:5265
+
+GET {{Wcs.Bs_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
