@@ -4,6 +4,7 @@ using Wcs.Bs.Domain;
 using Wcs.Bs.Hubs;
 using Wcs.Bs.Infrastructure;
 using Wcs.Bs.Services;
+using Wcs.Bs.Services.Pipeline;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,11 @@ builder.Services.AddScoped<PathConfigService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddSingleton<DeviceService>();
 builder.Services.AddHostedService<PlcDispatchService>();
+
+// Pipeline: 注册过滤器和钩子的实现（可替换为自定义实现）
+builder.Services.AddScoped<IDeviceTaskDispatchFilter, DefaultDispatchFilter>();
+builder.Services.AddScoped<IDeviceTaskCompletedHandler, DefaultDeviceTaskCompletedHandler>();
+builder.Services.AddScoped<ITaskCompletedHandler, DefaultTaskCompletedHandler>();
 
 builder.Services.AddSignalR();
 builder.Services.AddControllers()

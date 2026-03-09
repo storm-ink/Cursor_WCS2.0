@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Wcs.Bs.Domain;
 using Wcs.Bs.Infrastructure;
+using Wcs.Bs.Services.Pipeline;
 using TaskStatus = Wcs.Bs.Domain.TaskStatus;
 
 namespace Wcs.Bs.Services;
@@ -11,13 +12,22 @@ public class TaskService
     private readonly WcsDbContext _db;
     private readonly PathConfigService _pathService;
     private readonly ILogger<TaskService> _logger;
+    private readonly PipelineConfig _pipelineConfig;
+    private readonly IServiceProvider _serviceProvider;
     private static long _taskCounter = 0;
 
-    public TaskService(WcsDbContext db, PathConfigService pathService, ILogger<TaskService> logger)
+    public TaskService(
+        WcsDbContext db,
+        PathConfigService pathService,
+        ILogger<TaskService> logger,
+        IServiceProvider serviceProvider,
+        IConfiguration configuration)
     {
         _db = db;
         _pathService = pathService;
         _logger = logger;
+        _serviceProvider = serviceProvider;
+        _pipelineConfig = configuration.GetSection("Pipeline").Get<PipelineConfig>() ?? new PipelineConfig();
     }
 
     public async Task<TaskEntity> CreateTaskAsync(CreateTaskRequest request)
@@ -129,6 +139,23 @@ public class TaskService
         deviceTask.FinishedAt = DateTime.Now;
 
         var task = deviceTask.Task;
+
+        // ── 钩子：设备子任务完成后处理 ──
+        if (_pipelineConfig.EnableDeviceTaskCompletedHandler)
+        {
+            try
+            {
+                var handler = _serviceProvider.GetService<IDeviceTaskCompletedHandler>();
+                if (handler != null)
+                    await handler.HandleAsync(deviceTask, task);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Pipeline] DeviceTaskCompletedHandler error for {TaskCode}-{Step}",
+                    deviceTask.TaskCode, deviceTask.StepOrder);
+            }
+        }
+
         task.CurrentStepOrder = deviceTask.StepOrder + 1;
 
         if (deviceTask.StepOrder >= task.TotalSteps)
@@ -136,6 +163,21 @@ public class TaskService
             task.Status = TaskStatus.Finished;
             task.FinishedAt = DateTime.Now;
             _logger.LogInformation("[Task] Task {TaskCode} completed", task.TaskCode);
+
+            // ── 钩子：主任务完成后处理 ──
+            if (_pipelineConfig.EnableTaskCompletedHandler)
+            {
+                try
+                {
+                    var handler = _serviceProvider.GetService<ITaskCompletedHandler>();
+                    if (handler != null)
+                        await handler.HandleAsync(task);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[Pipeline] TaskCompletedHandler error for {TaskCode}", task.TaskCode);
+                }
+            }
         }
         else
         {
