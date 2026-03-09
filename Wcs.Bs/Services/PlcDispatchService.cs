@@ -77,12 +77,17 @@ public class PlcDispatchService : BackgroundService
                 _ = HandleReportAsync(deviceCode, msg);
             };
 
+            client.OnConnectionChanged += (deviceCode, connected) =>
+            {
+                _deviceService.UpdateStatus(deviceCode, s => s.IsConnected = connected);
+                _ = PushDeviceStatusToSignalR();
+            };
+
             _deviceService.SetClient(config.Code, client);
 
             try
             {
                 await client.ConnectAsync(token);
-                _deviceService.UpdateStatus(config.Code, s => s.IsConnected = true);
             }
             catch (Exception ex)
             {
@@ -116,6 +121,9 @@ public class PlcDispatchService : BackgroundService
                     d.Id != dt.Id);
 
             if (busyCheck) continue;
+
+            // ── 设备启用检查 ──
+            if (!_deviceService.IsEnabled(dt.DeviceCode)) continue;
 
             var client = _deviceService.GetClient(dt.DeviceCode);
             if (client == null || !client.IsConnected) continue;
@@ -168,6 +176,8 @@ public class PlcDispatchService : BackgroundService
             await db.SaveChangesAsync();
             _logger.LogInformation("[Dispatch] Sent task {TaskNo} step {Step} to {Device}",
                 dt.TaskCode, dt.StepOrder, dt.DeviceCode);
+
+            await NotifyTasksChanged(scope);
         }
     }
 
@@ -210,6 +220,9 @@ public class PlcDispatchService : BackgroundService
         }
 
         await db.SaveChangesAsync();
+
+        if (sendingTasks.Count > 0)
+            await NotifyTasksChanged(scope);
     }
 
     // ────────────────────────────────────────────────
@@ -237,6 +250,7 @@ public class PlcDispatchService : BackgroundService
 
             await hubContext.Clients.Group("view:devices").SendAsync("DeviceStatusUpdated",
                 _deviceService.GetAllStatuses());
+            await NotifyTasksChanged(scope);
         }
         catch (Exception ex)
         {
@@ -349,6 +363,28 @@ public class PlcDispatchService : BackgroundService
         if (!int.TryParse(parts.Last(), out var stepOrder)) return (null, 0);
 
         return (taskCode, stepOrder);
+    }
+
+    private async Task PushDeviceStatusToSignalR()
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var hub = scope.ServiceProvider.GetRequiredService<IHubContext<WcsHub>>();
+            await hub.Clients.Group("view:devices").SendAsync("DeviceStatusUpdated",
+                _deviceService.GetAllStatuses());
+        }
+        catch { }
+    }
+
+    private async Task NotifyTasksChanged(IServiceScope scope)
+    {
+        try
+        {
+            var hub = scope.ServiceProvider.GetRequiredService<IHubContext<WcsHub>>();
+            await hub.Clients.Group("view:tasks").SendAsync("TasksChanged");
+        }
+        catch { }
     }
 
     private async Task PushMessageToSignalR(string deviceCode, string rawData)

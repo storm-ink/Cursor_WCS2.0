@@ -21,6 +21,7 @@ builder.Services.AddScoped<PathConfigService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddSingleton<DeviceService>();
 builder.Services.AddHostedService<PlcDispatchService>();
+builder.Services.AddHostedService<DataCleanupService>();
 
 // Pipeline: 注册过滤器和钩子的实现（可替换为自定义实现）
 builder.Services.AddScoped<IDeviceTaskDispatchFilter, DefaultDispatchFilter>();

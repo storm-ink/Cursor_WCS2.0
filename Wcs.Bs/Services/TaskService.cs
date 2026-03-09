@@ -14,7 +14,6 @@ public class TaskService
     private readonly ILogger<TaskService> _logger;
     private readonly PipelineConfig _pipelineConfig;
     private readonly IServiceProvider _serviceProvider;
-    private static long _taskCounter = 0;
 
     public TaskService(
         WcsDbContext db,
@@ -30,24 +29,32 @@ public class TaskService
         _pipelineConfig = configuration.GetSection("Pipeline").Get<PipelineConfig>() ?? new PipelineConfig();
     }
 
+    // ── 任务编号：日期 + GUID 短码，天然唯一 ──
+    private static string GenerateTaskCode()
+    {
+        return $"T{DateTime.Now:yyyyMMdd}{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+    }
+
     public async Task<TaskEntity> CreateTaskAsync(CreateTaskRequest request)
     {
-        var taskCode = request.TaskCode ?? $"T{DateTime.Now:yyyyMMddHHmmss}{Interlocked.Increment(ref _taskCounter):D4}";
+        var taskCode = request.TaskCode;
+        if (string.IsNullOrWhiteSpace(taskCode))
+            taskCode = GenerateTaskCode();
 
         var existing = await _db.Tasks.AnyAsync(t => t.TaskCode == taskCode);
         if (existing)
-            throw new InvalidOperationException($"Task code {taskCode} already exists");
+            throw new InvalidOperationException($"任务编号 {taskCode} 已存在");
 
         var pathConfig = await _pathService.MatchPathAsync(request.StartLocationCode, request.EndLocationCode);
         if (pathConfig == null)
-            throw new InvalidOperationException($"No path found from {request.StartLocationCode} to {request.EndLocationCode}");
+            throw new InvalidOperationException($"未找到 {request.StartLocationCode} → {request.EndLocationCode} 的路径配置");
 
         var craneSteps = pathConfig.Steps.Where(s => s.DeviceType == "Crane").ToList();
         foreach (var cs in craneSteps)
         {
             var reachable = await _pathService.IsDestinationReachableAsync(cs.DeviceCode, request.EndLocationCode);
             if (!reachable)
-                throw new InvalidOperationException($"Destination {request.EndLocationCode} is not reachable by crane {cs.DeviceCode}");
+                throw new InvalidOperationException($"终点 {request.EndLocationCode} 不在堆垛机 {cs.DeviceCode} 可达范围内");
         }
 
         var task = new TaskEntity
@@ -72,10 +79,9 @@ public class TaskService
 
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
-
         await CreateDeviceTaskForStepAsync(task, pathConfig, 1);
 
-        _logger.LogInformation("[Task] Created task {TaskCode} from {Source} to {Dest}, path={Path}",
+        _logger.LogInformation("[Task] Created {TaskCode} from {Source} to {Dest}, path={Path}",
             taskCode, request.StartLocationCode, request.EndLocationCode, pathConfig.PathCode);
 
         return task;
@@ -96,12 +102,11 @@ public class TaskService
         var segSource = step.SegmentSource
             .Replace("{Source}", task.StartLocationCode)
             .Replace("{Destination}", task.EndLocationCode);
-
         var segDest = step.SegmentDest
             .Replace("{Source}", task.StartLocationCode)
             .Replace("{Destination}", task.EndLocationCode);
 
-        var deviceTask = new DeviceTaskEntity
+        _db.DeviceTasks.Add(new DeviceTaskEntity
         {
             TaskId = task.Id,
             TaskCode = task.TaskCode,
@@ -112,9 +117,7 @@ public class TaskService
             SegmentDest = segDest,
             Status = DeviceTaskStatus.Waiting,
             RoutingNo = step.RoutingNo
-        };
-
-        _db.DeviceTasks.Add(deviceTask);
+        });
         await _db.SaveChangesAsync();
 
         _logger.LogInformation("[Task] Created device task step {Step} for {TaskCode}: {Device} {Source}->{Dest}",
@@ -128,26 +131,18 @@ public class TaskService
             .FirstOrDefaultAsync(d => d.Id == deviceTaskId);
 
         if (deviceTask?.Task == null) return;
-
-        if (deviceTask.Status == DeviceTaskStatus.Finished)
-        {
-            _logger.LogDebug("[Task] Device task {Id} already finished, skip", deviceTaskId);
-            return;
-        }
+        if (deviceTask.Status == DeviceTaskStatus.Finished) return;
 
         deviceTask.Status = DeviceTaskStatus.Finished;
         deviceTask.FinishedAt = DateTime.Now;
-
         var task = deviceTask.Task;
 
-        // ── 钩子：设备子任务完成后处理 ──
         if (_pipelineConfig.EnableDeviceTaskCompletedHandler)
         {
             try
             {
                 var handler = _serviceProvider.GetService<IDeviceTaskCompletedHandler>();
-                if (handler != null)
-                    await handler.HandleAsync(deviceTask, task);
+                if (handler != null) await handler.HandleAsync(deviceTask, task);
             }
             catch (Exception ex)
             {
@@ -164,14 +159,12 @@ public class TaskService
             task.FinishedAt = DateTime.Now;
             _logger.LogInformation("[Task] Task {TaskCode} completed", task.TaskCode);
 
-            // ── 钩子：主任务完成后处理 ──
             if (_pipelineConfig.EnableTaskCompletedHandler)
             {
                 try
                 {
                     var handler = _serviceProvider.GetService<ITaskCompletedHandler>();
-                    if (handler != null)
-                        await handler.HandleAsync(task);
+                    if (handler != null) await handler.HandleAsync(task);
                 }
                 catch (Exception ex)
                 {
@@ -182,24 +175,78 @@ public class TaskService
         else
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var pathConfig = await _db.PathConfigs
+            var pathJson = await _db.PathConfigs
                 .Where(p => p.PathCode == task.PathCode)
                 .Select(p => p.ConfigJson)
                 .FirstOrDefaultAsync();
 
-            if (pathConfig != null)
+            if (pathJson != null)
             {
-                var config = JsonSerializer.Deserialize<PathConfigJson>(pathConfig, options);
+                var config = JsonSerializer.Deserialize<PathConfigJson>(pathJson, options);
                 if (config != null)
-                {
                     await CreateDeviceTaskForStepAsync(task, config, deviceTask.StepOrder + 1);
-                }
             }
         }
 
         await _db.SaveChangesAsync();
     }
 
+    // ── 取消任务 ──
+    public async Task<string?> CancelTaskAsync(long taskId)
+    {
+        var task = await _db.Tasks.FindAsync(taskId);
+        if (task == null) return "任务不存在";
+        if (task.Status == TaskStatus.Finished) return "任务已完成，无法取消";
+        if (task.Status == TaskStatus.Cancelled) return "任务已取消";
+
+        task.Status = TaskStatus.Cancelled;
+        task.FinishedAt = DateTime.Now;
+        task.ErrorMessage = "手动取消";
+
+        var deviceTasks = await _db.DeviceTasks
+            .Where(d => d.TaskId == taskId && d.Status != DeviceTaskStatus.Finished)
+            .ToListAsync();
+
+        foreach (var dt in deviceTasks)
+        {
+            dt.Status = DeviceTaskStatus.Error;
+            dt.ErrorMessage = "主任务已取消";
+            dt.FinishedAt = DateTime.Now;
+        }
+
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("[Task] Task {TaskCode} cancelled", task.TaskCode);
+        return null;
+    }
+
+    // ── 重试 Error 任务 ──
+    public async Task<string?> RetryTaskAsync(long taskId)
+    {
+        var task = await _db.Tasks.FindAsync(taskId);
+        if (task == null) return "任务不存在";
+        if (task.Status != TaskStatus.Error) return "只能重试异常状态的任务";
+
+        var errorDeviceTasks = await _db.DeviceTasks
+            .Where(d => d.TaskId == taskId && d.Status == DeviceTaskStatus.Error)
+            .ToListAsync();
+
+        foreach (var dt in errorDeviceTasks)
+        {
+            dt.Status = DeviceTaskStatus.Waiting;
+            dt.SendCount = 0;
+            dt.ErrorMessage = null;
+            dt.FinishedAt = null;
+        }
+
+        task.Status = TaskStatus.Created;
+        task.ErrorMessage = null;
+
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("[Task] Task {TaskCode} retried", task.TaskCode);
+        return null;
+    }
+
+    // ── 查询 ──
     public async Task<List<TaskEntity>> GetCurrentTasksAsync(int page = 1, int pageSize = 20)
     {
         return await _db.Tasks
@@ -215,15 +262,10 @@ public class TaskService
         DateTime? startDate, DateTime? endDate, TaskStatus? status, TaskType? type, int page = 1, int pageSize = 20)
     {
         var query = _db.Tasks.AsQueryable();
-
-        if (startDate.HasValue)
-            query = query.Where(t => t.CreatedAt >= startDate.Value);
-        if (endDate.HasValue)
-            query = query.Where(t => t.CreatedAt <= endDate.Value);
-        if (status.HasValue)
-            query = query.Where(t => t.Status == status.Value);
-        if (type.HasValue)
-            query = query.Where(t => t.Type == type.Value);
+        if (startDate.HasValue) query = query.Where(t => t.CreatedAt >= startDate.Value);
+        if (endDate.HasValue) query = query.Where(t => t.CreatedAt <= endDate.Value);
+        if (status.HasValue) query = query.Where(t => t.Status == status.Value);
+        if (type.HasValue) query = query.Where(t => t.Type == type.Value);
 
         var total = await query.CountAsync();
         var items = await query
@@ -243,26 +285,44 @@ public class TaskService
             .ToListAsync();
     }
 
+    // ── 数据归档清理 ──
+    public async Task<int> CleanupOldTasksAsync(int retainDays)
+    {
+        var cutoff = DateTime.Now.AddDays(-retainDays);
+        var oldTasks = await _db.Tasks
+            .Where(t => (t.Status == TaskStatus.Finished || t.Status == TaskStatus.Cancelled)
+                        && t.FinishedAt != null && t.FinishedAt < cutoff)
+            .ToListAsync();
+
+        if (oldTasks.Count == 0) return 0;
+
+        var taskIds = oldTasks.Select(t => t.Id).ToList();
+        var oldDeviceTasks = await _db.DeviceTasks
+            .Where(d => taskIds.Contains(d.TaskId))
+            .ToListAsync();
+
+        _db.DeviceTasks.RemoveRange(oldDeviceTasks);
+        _db.Tasks.RemoveRange(oldTasks);
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("[Cleanup] Removed {TaskCount} old tasks and {DeviceTaskCount} device tasks (>{Days} days)",
+            oldTasks.Count, oldDeviceTasks.Count, retainDays);
+
+        return oldTasks.Count;
+    }
+
+    // ── 重启恢复 ──
     public async Task RecoverOnRestartAsync()
     {
         var sendingTasks = await _db.Tasks
             .Where(t => t.Status == TaskStatus.SendingToPlc || t.Status == TaskStatus.Running)
             .ToListAsync();
-
-        foreach (var task in sendingTasks)
-        {
-            task.Status = TaskStatus.Created;
-        }
+        foreach (var task in sendingTasks) task.Status = TaskStatus.Created;
 
         var deviceTasks = await _db.DeviceTasks
             .Where(d => d.Status == DeviceTaskStatus.SendingToPlc || d.Status == DeviceTaskStatus.Running)
             .ToListAsync();
-
-        foreach (var dt in deviceTasks)
-        {
-            dt.Status = DeviceTaskStatus.Waiting;
-            dt.SendCount = 0;
-        }
+        foreach (var dt in deviceTasks) { dt.Status = DeviceTaskStatus.Waiting; dt.SendCount = 0; }
 
         await _db.SaveChangesAsync();
         _logger.LogInformation("[Task] Recovered {TaskCount} tasks and {DeviceTaskCount} device tasks on restart",

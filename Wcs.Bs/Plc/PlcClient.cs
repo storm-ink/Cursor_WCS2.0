@@ -16,6 +16,7 @@ public class PlcClient : IDisposable
 
     public event Action<string, string>? OnMessageReceived;
     public event Action<string, PlcMessage>? OnReportReceived;
+    public event Action<string, bool>? OnConnectionChanged;
     public bool IsConnected => _connected;
     public string DeviceCode => _deviceCode;
 
@@ -42,7 +43,7 @@ public class PlcClient : IDisposable
                         _client = new TcpClient();
                         await _client.ConnectAsync(_ip, _port, _cts.Token);
                         _stream = _client.GetStream();
-                        _connected = true;
+                        SetConnected(true);
                         _logger.LogInformation("[PLC] Connected to {Device} at {Ip}:{Port}", _deviceCode, _ip, _port);
                     }
 
@@ -50,7 +51,7 @@ public class PlcClient : IDisposable
                 }
                 catch (Exception ex) when (!_cts.Token.IsCancellationRequested)
                 {
-                    _connected = false;
+                    if (_connected) SetConnected(false);
                     _logger.LogWarning("[PLC] Connection to {Device} lost: {Msg}. Retrying in 5s...", _deviceCode, ex.Message);
                     await Task.Delay(5000, _cts.Token);
                 }
@@ -58,6 +59,12 @@ public class PlcClient : IDisposable
         }, _cts.Token);
 
         return Task.CompletedTask;
+    }
+
+    private void SetConnected(bool value)
+    {
+        _connected = value;
+        OnConnectionChanged?.Invoke(_deviceCode, value);
     }
 
     private async Task ReceiveLoopAsync(CancellationToken token)
@@ -70,7 +77,7 @@ public class PlcClient : IDisposable
             var bytesRead = await _stream.ReadAsync(buffer, token);
             if (bytesRead == 0)
             {
-                _connected = false;
+                SetConnected(false);
                 break;
             }
 
@@ -87,11 +94,7 @@ public class PlcClient : IDisposable
                 data = data[(end + 1)..];
 
                 OnMessageReceived?.Invoke(_deviceCode, message);
-
-                var parsed = PlcMessage.Parse(message);
-                OnReportReceived?.Invoke(_deviceCode, parsed);
-
-                _logger.LogDebug("[PLC] Received from {Device}: {Msg}", _deviceCode, message);
+                OnReportReceived?.Invoke(_deviceCode, PlcMessage.Parse(message));
             }
 
             sb.Clear();
@@ -112,12 +115,11 @@ public class PlcClient : IDisposable
             var bytes = Encoding.ASCII.GetBytes(message);
             await _stream.WriteAsync(bytes);
             OnMessageReceived?.Invoke(_deviceCode, $"[SENT] {message}");
-            _logger.LogDebug("[PLC] Sent to {Device}: {Msg}", _deviceCode, message);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[PLC] Failed to send to {Device}", _deviceCode);
-            _connected = false;
+            SetConnected(false);
         }
     }
 

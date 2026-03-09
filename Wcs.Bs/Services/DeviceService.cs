@@ -26,6 +26,7 @@ public class DeviceService
             Code = config.Code,
             Type = config.Type,
             IsConnected = false,
+            IsEnabled = true,
             LastUpdate = DateTime.Now
         };
         _messages[config.Code] = new List<DeviceMessage>();
@@ -34,15 +35,11 @@ public class DeviceService
     public PlcClient? GetClient(string deviceCode) =>
         _clients.TryGetValue(deviceCode, out var client) ? client : null;
 
-    public void SetClient(string deviceCode, PlcClient client)
-    {
+    public void SetClient(string deviceCode, PlcClient client) =>
         _clients[deviceCode] = client;
-    }
 
-    public List<DeviceStatus> GetAllStatuses()
-    {
-        return _statuses.Values.ToList();
-    }
+    public List<DeviceStatus> GetAllStatuses() =>
+        _statuses.Values.ToList();
 
     public DeviceStatus? GetStatus(string deviceCode) =>
         _statuses.TryGetValue(deviceCode, out var status) ? status : null;
@@ -54,6 +51,20 @@ public class DeviceService
             update(status);
             status.LastUpdate = DateTime.Now;
         }
+    }
+
+    public bool SetEnabled(string deviceCode, bool enabled)
+    {
+        if (!_statuses.TryGetValue(deviceCode, out var status)) return false;
+        status.IsEnabled = enabled;
+        status.LastUpdate = DateTime.Now;
+        _logger.LogInformation("[Device] {Code} {Action}", deviceCode, enabled ? "启用" : "禁用");
+        return true;
+    }
+
+    public bool IsEnabled(string deviceCode)
+    {
+        return _statuses.TryGetValue(deviceCode, out var s) && s.IsEnabled;
     }
 
     public void AddMessage(string deviceCode, string direction, string rawData, string? parsedSummary = null)
@@ -93,6 +104,7 @@ public class DeviceStatus
     public string Code { get; set; } = "";
     public string Type { get; set; } = "";
     public bool IsConnected { get; set; }
+    public bool IsEnabled { get; set; } = true;
     public string CurrentTaskNo { get; set; } = "";
     public string State { get; set; } = "Idle";
     public DateTime LastUpdate { get; set; }
