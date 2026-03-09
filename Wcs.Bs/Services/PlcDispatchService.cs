@@ -17,6 +17,7 @@ public class PlcDispatchService : BackgroundService
     private readonly CvPlcConfig _cvPlcConfig;
     private readonly PipelineConfig _pipelineConfig;
     private readonly SemaphoreSlim _reportLock = new(1, 1);
+    private volatile bool _tasksDirty = false;
 
     public PlcDispatchService(
         IServiceProvider serviceProvider,
@@ -46,8 +47,12 @@ public class PlcDispatchService : BackgroundService
         {
             try
             {
+                _tasksDirty = false;
                 await DispatchPendingTasksAsync();
                 await CheckTimeoutsAsync();
+
+                if (_tasksDirty)
+                    await FlushTasksNotification();
             }
             catch (Exception ex)
             {
@@ -177,7 +182,7 @@ public class PlcDispatchService : BackgroundService
             _logger.LogInformation("[Dispatch] Sent task {TaskNo} step {Step} to {Device}",
                 dt.TaskCode, dt.StepOrder, dt.DeviceCode);
 
-            await NotifyTasksChanged(scope);
+            _tasksDirty = true;
         }
     }
 
@@ -194,11 +199,13 @@ public class PlcDispatchService : BackgroundService
             .Where(d => d.Status == DeviceTaskStatus.SendingToPlc && d.LastSendTime != null)
             .ToListAsync();
 
+        var changed = false;
         foreach (var dt in sendingTasks)
         {
             var timeout = dt.TimeoutSeconds > 0 ? dt.TimeoutSeconds : _plcConfig.TaskTimeoutSeconds;
             if (dt.LastSendTime!.Value.AddSeconds(timeout) > DateTime.Now) continue;
 
+            changed = true;
             if (dt.SendCount >= _plcConfig.MaxRetryCount)
             {
                 dt.Status = DeviceTaskStatus.Error;
@@ -219,10 +226,8 @@ public class PlcDispatchService : BackgroundService
             }
         }
 
+        if (changed) _tasksDirty = true;
         await db.SaveChangesAsync();
-
-        if (sendingTasks.Count > 0)
-            await NotifyTasksChanged(scope);
     }
 
     // ────────────────────────────────────────────────
@@ -250,7 +255,6 @@ public class PlcDispatchService : BackgroundService
 
             await hubContext.Clients.Group("view:devices").SendAsync("DeviceStatusUpdated",
                 _deviceService.GetAllStatuses());
-            await NotifyTasksChanged(scope);
         }
         catch (Exception ex)
         {
@@ -335,6 +339,7 @@ public class PlcDispatchService : BackgroundService
         await db.SaveChangesAsync();
 
         _logger.LogInformation("[Dispatch] Send confirmed by PLC: {TaskNo}, status → Running", taskNo);
+        await FlushTasksNotification();
     }
 
     private async Task CompleteDeviceTaskByTaskNo(WcsDbContext db, string taskNo, IServiceScope scope)
@@ -352,6 +357,7 @@ public class PlcDispatchService : BackgroundService
         await taskService.OnDeviceTaskCompletedAsync(deviceTask.Id);
 
         _logger.LogInformation("[Dispatch] Device task completed: {TaskNo}", taskNo);
+        await FlushTasksNotification();
     }
 
     private static (string? TaskCode, int StepOrder) ParseTaskNo(string taskNo)
@@ -377,10 +383,16 @@ public class PlcDispatchService : BackgroundService
         catch { }
     }
 
-    private async Task NotifyTasksChanged(IServiceScope scope)
+    private DateTime _lastTasksPush = DateTime.MinValue;
+
+    private async Task FlushTasksNotification()
     {
+        if ((DateTime.Now - _lastTasksPush).TotalMilliseconds < 800) return;
+        _lastTasksPush = DateTime.Now;
+
         try
         {
+            using var scope = _serviceProvider.CreateScope();
             var hub = scope.ServiceProvider.GetRequiredService<IHubContext<WcsHub>>();
             await hub.Clients.Group("view:tasks").SendAsync("TasksChanged");
         }

@@ -135,7 +135,11 @@ function canCancel(status) {
   return ['Created', 'SendingToPlc', 'Running', 'Error'].includes(status)
 }
 
-function handleTasksChanged() { loadTasks() }
+let debounceTimer = null
+function handleTasksChanged() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => loadTasks(), 500)
+}
 
 const statusMap = { Created: '已创建', SendingToPlc: '下发中', Running: '运行中', Finished: '已完成', Error: '异常', Cancelled: '已取消' }
 const statusLabel = s => statusMap[s] || s
