@@ -14,6 +14,7 @@ public class PlcDispatchService : BackgroundService
     private readonly ILogger<PlcDispatchService> _logger;
     private readonly PlcConfig _plcConfig;
     private readonly CvPlcConfig _cvPlcConfig;
+    private readonly SemaphoreSlim _reportLock = new(1, 1);
 
     public PlcDispatchService(
         IServiceProvider serviceProvider,
@@ -181,6 +182,7 @@ public class PlcDispatchService : BackgroundService
     {
         var cmd = msg.GetField("CMD");
 
+        await _reportLock.WaitAsync();
         try
         {
             using var scope = _serviceProvider.CreateScope();
@@ -218,6 +220,10 @@ public class PlcDispatchService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Dispatch] Error handling report from {Device}", deviceCode);
+        }
+        finally
+        {
+            _reportLock.Release();
         }
     }
 

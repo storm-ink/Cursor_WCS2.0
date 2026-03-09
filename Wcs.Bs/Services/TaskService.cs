@@ -73,6 +73,13 @@ public class TaskService
 
     public async Task CreateDeviceTaskForStepAsync(TaskEntity task, PathConfigJson pathConfig, int stepOrder)
     {
+        var exists = await _db.DeviceTasks.AnyAsync(d => d.TaskId == task.Id && d.StepOrder == stepOrder);
+        if (exists)
+        {
+            _logger.LogWarning("[Task] Device task step {Step} for {TaskCode} already exists, skip", stepOrder, task.TaskCode);
+            return;
+        }
+
         var step = pathConfig.Steps.FirstOrDefault(s => s.StepOrder == stepOrder);
         if (step == null) return;
 
@@ -111,6 +118,12 @@ public class TaskService
             .FirstOrDefaultAsync(d => d.Id == deviceTaskId);
 
         if (deviceTask?.Task == null) return;
+
+        if (deviceTask.Status == DeviceTaskStatus.Finished)
+        {
+            _logger.LogDebug("[Task] Device task {Id} already finished, skip", deviceTaskId);
+            return;
+        }
 
         deviceTask.Status = DeviceTaskStatus.Finished;
         deviceTask.FinishedAt = DateTime.Now;
