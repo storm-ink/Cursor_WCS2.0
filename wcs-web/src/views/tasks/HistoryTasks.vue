@@ -40,7 +40,7 @@
         </el-form>
       </div>
 
-      <el-table :data="tasks" stripe>
+      <el-table :data="tasks" stripe v-loading="loading" element-loading-background="rgba(0,0,0,0.3)">
         <el-table-column prop="taskCode" label="任务编号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="source" label="来源" min-width="70" align="center">
           <template #default="{ row }">{{ sourceLabel(row.source) }}</template>
@@ -64,6 +64,9 @@
           <template #default="{ row }">{{ formatTime(row.finishedAt) }}</template>
         </el-table-column>
         <el-table-column prop="errorMessage" label="错误信息" min-width="120" show-overflow-tooltip />
+        <template #empty>
+          <div style="padding: 40px 0; color: var(--text-muted);">暂无历史任务数据</div>
+        </template>
       </el-table>
 
       <div class="pagination-bar">
@@ -89,9 +92,11 @@ const tasks = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
+const loading = ref(false)
 const filters = ref({ startDate: null, endDate: null, status: null, type: null })
 
 async function search() {
+  loading.value = true
   try {
     const params = { page: page.value, pageSize: pageSize.value, ...filters.value }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
@@ -99,6 +104,7 @@ async function search() {
     tasks.value = result.items
     total.value = result.total
   } catch (e) { console.error(e) }
+  finally { loading.value = false }
 }
 
 const statusMap = { Created: '已创建', SendingToPlc: '下发中', Running: '运行中', Finished: '已完成', Error: '异常', Cancelled: '已取消' }

@@ -17,20 +17,25 @@ api.interceptors.response.use(
 export const taskApi = {
   getCurrent: (page = 1, pageSize = 20) =>
     api.get('/tasks', { params: { page, pageSize } }),
-
   getHistory: (params) =>
     api.get('/tasks/history', { params }),
-
   create: (data) =>
     api.post('/tasks', data),
-
   getDeviceTasks: (taskCode) =>
-    api.get('/devicetasks', { params: { taskCode } })
+    api.get('/devicetasks', { params: { taskCode } }),
+  cancel: (id) =>
+    api.post(`/tasks/${id}/cancel`),
+  retry: (id) =>
+    api.post(`/tasks/${id}/retry`),
+  cleanup: (retainDays = 30) =>
+    api.delete('/tasks/cleanup', { params: { retainDays } })
 }
 
 export const deviceApi = {
   getAll: () => api.get('/devices'),
-  getMessages: (code) => api.get(`/devices/${code}/messages`)
+  getMessages: (code) => api.get(`/devices/${code}/messages`),
+  enable: (code) => api.post(`/devices/${code}/enable`),
+  disable: (code) => api.post(`/devices/${code}/disable`)
 }
 
 export const wmsApi = {
@@ -40,6 +45,10 @@ export const wmsApi = {
 
 export const configApi = {
   importPaths: (data) => api.post('/config/import-paths', data)
+}
+
+export const healthApi = {
+  check: () => api.get('/health')
 }
 
 export default api
