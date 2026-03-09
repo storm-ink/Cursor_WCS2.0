@@ -3,8 +3,8 @@
     <div class="panel">
       <div class="panel-title">实时日志</div>
 
-      <div style="margin-bottom: 12px; display: flex; gap: 12px; align-items: center;">
-        <el-select v-model="filterCategory" placeholder="类型" clearable style="width: 120px;" size="small">
+      <div class="log-toolbar">
+        <el-select v-model="filterCategory" placeholder="类型" clearable size="small" style="width: 100px;">
           <el-option label="全部" value="" />
           <el-option label="Api" value="Api" />
           <el-option label="Plc" value="Plc" />
@@ -12,7 +12,7 @@
           <el-option label="Device" value="Device" />
           <el-option label="System" value="System" />
         </el-select>
-        <el-select v-model="filterLevel" placeholder="级别" clearable style="width: 120px;" size="small">
+        <el-select v-model="filterLevel" placeholder="级别" clearable size="small" style="width: 110px;">
           <el-option label="全部" value="" />
           <el-option label="Information" value="Information" />
           <el-option label="Warning" value="Warning" />
@@ -21,22 +21,19 @@
         </el-select>
         <el-button size="small" @click="clearLogs">清空</el-button>
         <el-checkbox v-model="autoScroll" size="small">自动滚动</el-checkbox>
-        <span style="color: #556677; font-size: 12px; margin-left: auto;">
-          共 {{ filteredLogs.length }} 条
-        </span>
+        <span class="log-count">{{ filteredLogs.length }} 条</span>
       </div>
 
       <div class="log-list" ref="logListRef">
-        <div v-for="(log, idx) in filteredLogs" :key="idx" class="log-entry" :class="'level-' + log.level?.toLowerCase()">
+        <div v-for="(log, idx) in filteredLogs" :key="idx"
+             class="log-row" :class="'log-' + log.level?.toLowerCase()">
           <span class="log-time">{{ log.timestamp }}</span>
-          <span class="log-level">{{ log.level }}</span>
-          <span class="log-category">[{{ log.category }}]</span>
-          <span class="log-message">{{ log.message }}</span>
-          <span v-if="log.exception" class="log-exception">{{ log.exception }}</span>
+          <span class="log-level">{{ levelShort(log.level) }}</span>
+          <span class="log-category">{{ log.category }}</span>
+          <span class="log-msg">{{ log.message }}</span>
+          <span v-if="log.exception" class="log-exc">{{ log.exception }}</span>
         </div>
-        <div v-if="filteredLogs.length === 0" style="color: #556677; text-align: center; padding: 40px;">
-          等待日志数据...
-        </div>
+        <div v-if="filteredLogs.length === 0" class="log-empty">等待日志数据...</div>
       </div>
     </div>
   </div>
@@ -52,7 +49,6 @@ const filterLevel = ref('')
 const autoScroll = ref(true)
 const logListRef = ref(null)
 const { joinGroup, leaveGroup, on, off } = useSignalR()
-const MAX_LOGS = 500
 
 const filteredLogs = computed(() => {
   return logs.value.filter(log => {
@@ -62,22 +58,14 @@ const filteredLogs = computed(() => {
   })
 })
 
+const levelShort = l => ({ Information: 'INF', Warning: 'WRN', Error: 'ERR', Debug: 'DBG' }[l] || l)
+
 function handleLog(data) {
   logs.value.push(data)
-  if (logs.value.length > MAX_LOGS) {
-    logs.value = logs.value.slice(-MAX_LOGS)
-  }
-  if (autoScroll.value) {
-    nextTick(() => {
-      const el = logListRef.value
-      if (el) el.scrollTop = el.scrollHeight
-    })
-  }
+  if (logs.value.length > 500) logs.value = logs.value.slice(-500)
 }
 
-function clearLogs() {
-  logs.value = []
-}
+function clearLogs() { logs.value = [] }
 
 watch(filteredLogs, () => {
   if (autoScroll.value) {
@@ -88,70 +76,73 @@ watch(filteredLogs, () => {
   }
 })
 
-onMounted(() => {
-  joinGroup('view:logs')
-  on('LogReceived', handleLog)
-})
-
-onUnmounted(() => {
-  leaveGroup('view:logs')
-  off('LogReceived', handleLog)
-})
+onMounted(() => { joinGroup('view:logs'); on('LogReceived', handleLog) })
+onUnmounted(() => { leaveGroup('view:logs'); off('LogReceived', handleLog) })
 </script>
 
 <style scoped>
-.log-list {
-  max-height: calc(100vh - 240px);
-  overflow-y: auto;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  background: #080e1a;
-  border-radius: 6px;
-  padding: 8px;
-}
-
-.log-entry {
-  padding: 3px 6px;
+.log-toolbar {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  border-bottom: 1px solid #0d1520;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
-.log-entry:hover {
-  background: rgba(79, 195, 247, 0.05);
+.log-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
-.log-time {
-  color: #556677;
-  white-space: nowrap;
-  flex-shrink: 0;
+.log-list {
+  height: calc(100vh - 240px);
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-deep);
+  border-radius: 6px;
+  padding: 4px;
 }
+
+.log-row {
+  padding: 3px 8px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  border-radius: 3px;
+  line-height: 1.8;
+}
+.log-row:hover { background: rgba(255,255,255,0.015); }
+
+.log-time { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
 
 .log-level {
-  white-space: nowrap;
+  font-weight: 700;
+  width: 30px;
+  text-align: center;
   flex-shrink: 0;
-  width: 80px;
+  font-size: 10px;
 }
+.log-information .log-level { color: #3b9eff; }
+.log-warning .log-level { color: #f59e0b; }
+.log-error .log-level { color: #ef4444; }
+.log-debug .log-level { color: #6b7280; }
 
-.level-information .log-level { color: #4fc3f7; }
-.level-warning .log-level { color: #ffa726; }
-.level-error .log-level { color: #ef5350; }
-.level-debug .log-level { color: #78909c; }
+.log-warning { background: rgba(245, 158, 11, 0.04); }
+.log-error { background: rgba(239, 68, 68, 0.06); }
 
 .log-category {
-  color: #8899aa;
+  color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 48px;
 }
 
-.log-message {
-  color: #c0ccd8;
-  word-break: break-all;
-}
+.log-msg { color: var(--text-secondary); word-break: break-all; }
+.log-exc { color: var(--danger); word-break: break-all; }
 
-.log-exception {
-  color: #ef5350;
-  word-break: break-all;
-}
+.log-empty { color: var(--text-muted); text-align: center; padding: 60px 0; }
 </style>
