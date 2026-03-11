@@ -43,13 +43,16 @@
         <el-table-column prop="createdAt" label="创建时间" min-width="140">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" min-width="130" align="center" fixed="right">
+        <el-table-column label="操作" min-width="200" align="center" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'Error'" size="small" type="warning" plain @click.stop="retryTask(row)">
               重试
             </el-button>
             <el-button v-if="canCancel(row.status)" size="small" type="danger" plain @click.stop="cancelTask(row)">
               取消
+            </el-button>
+            <el-button v-if="canComplete(row.status)" size="small" type="success" plain @click.stop="completeTask(row)">
+              完成
             </el-button>
           </template>
         </el-table-column>
@@ -79,6 +82,19 @@
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
         <el-table-column prop="errorMessage" label="错误信息" min-width="120" show-overflow-tooltip />
+        <el-table-column label="操作" min-width="200" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="row.status === 'Error'" size="small" type="warning" plain @click.stop="resendDeviceTask(row)">
+              重发
+            </el-button>
+            <el-button v-if="canCancelDevice(row.status)" size="small" type="danger" plain @click.stop="cancelDeviceTask(row)">
+              取消
+            </el-button>
+            <el-button v-if="canCompleteDevice(row.status)" size="small" type="success" plain @click.stop="completeDeviceTask(row)">
+              完成
+            </el-button>
+          </template>
+        </el-table-column>
         <template #empty>
           <div style="padding: 20px 0; color: var(--text-muted);">暂无设备任务</div>
         </template>
@@ -90,7 +106,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { taskApi } from '../../api'
+import { taskApi, deviceTaskApi } from '../../api'
 import { useSignalR } from '../../stores/signalr'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -146,8 +162,63 @@ async function retryTask(row) {
   }
 }
 
+async function completeTask(row) {
+  try {
+    await ElMessageBox.confirm(`确定要完成任务 ${row.taskCode}？`, '确认完成', { type: 'warning' })
+    await taskApi.complete(row.id)
+    ElMessage.success('任务已完成')
+    await loadTasks()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '完成失败')
+  }
+}
+
+async function resendDeviceTask(row) {
+  try {
+    await deviceTaskApi.resend(row.id)
+    ElMessage.success('设备任务已重发')
+    if (selectedTask.value) deviceTasks.value = await taskApi.getDeviceTasks(selectedTask.value.taskCode)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '重发失败')
+  }
+}
+
+async function cancelDeviceTask(row) {
+  try {
+    await ElMessageBox.confirm(`确定要取消设备任务 ${row.deviceCode} 步骤${row.stepOrder}？`, '确认取消', { type: 'warning' })
+    await deviceTaskApi.cancel(row.id)
+    ElMessage.success('设备任务已取消')
+    if (selectedTask.value) deviceTasks.value = await taskApi.getDeviceTasks(selectedTask.value.taskCode)
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '取消失败')
+  }
+}
+
+async function completeDeviceTask(row) {
+  try {
+    await ElMessageBox.confirm(`确定要完成设备任务 ${row.deviceCode} 步骤${row.stepOrder}？`, '确认完成', { type: 'warning' })
+    await deviceTaskApi.complete(row.id)
+    ElMessage.success('设备任务已完成')
+    if (selectedTask.value) deviceTasks.value = await taskApi.getDeviceTasks(selectedTask.value.taskCode)
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '完成失败')
+  }
+}
+
 function canCancel(status) {
   return ['Created', 'SendingToPlc', 'Running', 'Error'].includes(status)
+}
+
+function canComplete(status) {
+  return ['Created', 'SendingToPlc', 'Running', 'Error'].includes(status)
+}
+
+function canCancelDevice(status) {
+  return ['Waiting', 'SendingToPlc', 'Running', 'Error'].includes(status)
+}
+
+function canCompleteDevice(status) {
+  return ['Waiting', 'SendingToPlc', 'Running', 'Error'].includes(status)
 }
 
 let debounceTimer = null
