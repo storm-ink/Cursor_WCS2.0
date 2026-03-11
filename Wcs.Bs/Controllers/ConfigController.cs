@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wcs.Bs.Services;
 
@@ -5,6 +6,7 @@ namespace Wcs.Bs.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "admin")]
 public class ConfigController : ControllerBase
 {
     private readonly PathConfigService _pathConfigService;

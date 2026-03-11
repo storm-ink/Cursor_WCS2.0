@@ -11,6 +11,7 @@ public class WcsDbContext : DbContext
     public DbSet<DeviceTaskEntity> DeviceTasks => Set<DeviceTaskEntity>();
     public DbSet<PathConfigEntity> PathConfigs => Set<PathConfigEntity>();
     public DbSet<CraneReachableConfigEntity> CraneReachableConfigs => Set<CraneReachableConfigEntity>();
+    public DbSet<UserEntity> Users => Set<UserEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

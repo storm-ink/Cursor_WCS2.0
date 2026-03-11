@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Wcs.Bs.Hubs;
@@ -7,6 +8,7 @@ namespace Wcs.Bs.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "admin,user")]
 public class DevicesController : ControllerBase
 {
     private readonly DeviceService _deviceService;

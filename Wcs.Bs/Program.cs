@@ -1,4 +1,8 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Wcs.Bs.Domain;
 using Wcs.Bs.Hubs;
@@ -36,6 +40,24 @@ builder.Services.AddHostedService<DataCleanupService>();
 builder.Services.AddScoped<IDeviceTaskDispatchFilter, DefaultDispatchFilter>();
 builder.Services.AddScoped<IDeviceTaskCompletedHandler, DefaultDeviceTaskCompletedHandler>();
 builder.Services.AddScoped<ITaskCompletedHandler, DefaultTaskCompletedHandler>();
+
+// JWT Authentication
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+builder.Services.AddAuthorization();
 
 builder.Services.AddSignalR();
 builder.Services.AddControllers()
@@ -83,6 +105,22 @@ using (var scope = app.Services.CreateScope())
     {
         deviceService.RegisterDevice(device);
     }
+
+    // 初始化默认用户
+    var hasher = new PasswordHasher<string>();
+    var seedUsers = new[]
+    {
+        new UserEntity { Username = "admin", Role = "admin", PasswordHash = hasher.HashPassword("admin", "Sineva@123"), CreatedAt = DateTime.UtcNow },
+        new UserEntity { Username = "user",  Role = "user",  PasswordHash = hasher.HashPassword("user",  "user@123"),   CreatedAt = DateTime.UtcNow }
+    };
+    foreach (var seedUser in seedUsers)
+    {
+        if (!db.Users.Any(u => u.Username == seedUser.Username))
+        {
+            db.Users.Add(seedUser);
+        }
+    }
+    db.SaveChanges();
 }
 
 Log.Logger = new LoggerConfiguration()
@@ -91,6 +129,8 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())

@@ -1,13 +1,27 @@
 import axios from 'axios'
+import { useAuth } from '../stores/auth'
 
 const api = axios.create({
   baseURL: '/api',
   timeout: 10000
 })
 
+api.interceptors.request.use(config => {
+  const { token } = useAuth()
+  if (token.value) {
+    config.headers.Authorization = `Bearer ${token.value}`
+  }
+  return config
+})
+
 api.interceptors.response.use(
   response => response.data,
   error => {
+    if (error.response?.status === 401) {
+      const { clearAuth } = useAuth()
+      clearAuth()
+      window.location.href = '/login'
+    }
     const msg = error.response?.data?.error || error.message
     console.error('API Error:', msg)
     return Promise.reject(error)
@@ -72,6 +86,19 @@ export const configApi = {
 
 export const healthApi = {
   check: () => api.get('/health')
+}
+
+export const authApi = {
+  login: (username, password) => api.post('/auth/login', { username, password }),
+  guest: () => api.post('/auth/guest')
+}
+
+export const userApi = {
+  getAll: () => api.get('/users'),
+  create: (username, password, role) => api.post('/users', { username, password, role }),
+  remove: (id) => api.delete(`/users/${id}`),
+  changeMyPassword: (oldPassword, newPassword) =>
+    api.put('/users/me/password', { oldPassword, newPassword })
 }
 
 export default api
