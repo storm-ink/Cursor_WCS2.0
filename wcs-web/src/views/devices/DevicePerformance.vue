@@ -137,11 +137,14 @@ async function calculateStats(deviceCode) {
         .filter(t => t.startedAt && t.finishedAt)
         .map(t => (new Date(t.finishedAt) - new Date(t.startedAt)) / 1000)
         .reduce((a, b) => a + b, 0)
-      // 假设查询时间范围 = 最早创建到最晚完成
       const times = allTasks.map(t => new Date(t.createdAt).getTime())
-      const finished = completedTasks.map(t => new Date(t.finishedAt).getTime())
-      const span = (Math.max(...finished) - Math.min(...times)) / 1000
-      utilization = span > 0 ? Math.min(Math.round((busySeconds / span) * 100), 100) : 0
+      const finished = completedTasks
+        .filter(t => t.finishedAt)
+        .map(t => new Date(t.finishedAt).getTime())
+      if (times.length > 0 && finished.length > 0) {
+        const span = (Math.max(...finished) - Math.min(...times)) / 1000
+        utilization = span > 0 ? Math.min(Math.round((busySeconds / span) * 100), 100) : 0
+      }
     }
 
     stats.value = { utilization, completedCount, avgDuration, errorRate, totalCount, errorCount }
