@@ -14,31 +14,6 @@ public class WcsDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<TaskEntity>(entity =>
-        {
-            entity.HasIndex(e => e.TaskCode).IsUnique();
-            entity.HasIndex(e => e.Status);
-            entity.HasIndex(e => e.CreatedAt);
-        });
-
-        modelBuilder.Entity<DeviceTaskEntity>(entity =>
-        {
-            entity.HasIndex(e => new { e.TaskId, e.StepOrder });
-            entity.HasIndex(e => e.Status);
-            entity.HasOne(e => e.Task)
-                  .WithMany(t => t.DeviceTasks)
-                  .HasForeignKey(e => e.TaskId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<PathConfigEntity>(entity =>
-        {
-            entity.HasIndex(e => e.PathCode);
-        });
-
-        modelBuilder.Entity<CraneReachableConfigEntity>(entity =>
-        {
-            entity.HasIndex(e => e.DeviceCode);
-        });
+        WcsModelConfiguration.Configure(modelBuilder);
     }
 }

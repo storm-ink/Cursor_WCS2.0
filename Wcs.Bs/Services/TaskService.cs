@@ -306,7 +306,7 @@ public class TaskService
         _db.Tasks.RemoveRange(oldTasks);
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("[Cleanup] Removed {TaskCount} old tasks and {DeviceTaskCount} device tasks (>{Days} days)",
+        _logger.LogInformation("[Cleanup] Removed {TaskCount} old tasks and {DeviceTaskCount} device tasks from current database (>{Days} days)",
             oldTasks.Count, oldDeviceTasks.Count, retainDays);
 
         return oldTasks.Count;
