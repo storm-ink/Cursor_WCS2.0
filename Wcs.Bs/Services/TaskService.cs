@@ -152,6 +152,7 @@ public class TaskService
         }
 
         task.CurrentStepOrder = deviceTask.StepOrder + 1;
+        task.CurrentLocationCode = deviceTask.SegmentDest;
 
         if (deviceTask.StepOrder >= task.TotalSteps)
         {

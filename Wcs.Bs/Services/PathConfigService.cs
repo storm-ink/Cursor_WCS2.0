@@ -35,37 +35,48 @@ public class PathConfigService
         var importData = JsonSerializer.Deserialize<PathConfigImportFile>(json, options);
         if (importData == null) return;
 
-        if (importData.Paths?.Count > 0)
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        try
         {
-            _db.PathConfigs.RemoveRange(_db.PathConfigs);
-            foreach (var path in importData.Paths)
+            if (importData.Paths?.Count > 0)
             {
-                _db.PathConfigs.Add(new PathConfigEntity
+                _db.PathConfigs.RemoveRange(_db.PathConfigs);
+                foreach (var path in importData.Paths)
                 {
-                    PathCode = path.PathCode,
-                    Source = path.Source,
-                    DestinationPattern = path.DestinationPattern,
-                    ConfigJson = JsonSerializer.Serialize(path, options),
-                    IsActive = true
-                });
+                    _db.PathConfigs.Add(new PathConfigEntity
+                    {
+                        PathCode = path.PathCode,
+                        Source = path.Source,
+                        DestinationPattern = path.DestinationPattern,
+                        ConfigJson = JsonSerializer.Serialize(path, options),
+                        IsActive = true
+                    });
+                }
             }
+
+            if (importData.CraneReachable?.Count > 0)
+            {
+                _db.CraneReachableConfigs.RemoveRange(_db.CraneReachableConfigs);
+                foreach (var cr in importData.CraneReachable)
+                {
+                    _db.CraneReachableConfigs.Add(new CraneReachableConfigEntity
+                    {
+                        DeviceCode = cr.DeviceCode,
+                        ReachablePattern = cr.ReachablePattern,
+                        IsActive = true
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
         }
 
-        if (importData.CraneReachable?.Count > 0)
-        {
-            _db.CraneReachableConfigs.RemoveRange(_db.CraneReachableConfigs);
-            foreach (var cr in importData.CraneReachable)
-            {
-                _db.CraneReachableConfigs.Add(new CraneReachableConfigEntity
-                {
-                    DeviceCode = cr.DeviceCode,
-                    ReachablePattern = cr.ReachablePattern,
-                    IsActive = true
-                });
-            }
-        }
-
-        await _db.SaveChangesAsync();
         _logger.LogInformation("Imported {PathCount} paths and {CraneCount} crane configs",
             importData.Paths?.Count ?? 0, importData.CraneReachable?.Count ?? 0);
     }
