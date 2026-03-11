@@ -1,132 +1,125 @@
 <template>
-   <div class="sub-tabs">
-        <router-link to="/devices/deviceManagement">设备列表</router-link>
-        <router-link to="/devices/deviceControlCommand">控制指令管理</router-link>
-        <router-link to="/devices/deviceCurrentTasks">当前状态</router-link>
-         <router-link to="/devices/deviceHistoryTasks">历史任务</router-link>
-        <router-link to="/devices/devicePerformanceAnalysis">性能分析</router-link>
-        <router-link to="/devices/deviceProfiles">设备档案</router-link>
-
-  </div>
   <div>
+    <div class="sub-tabs">
+      <router-link to="/devices/deviceManagement">设备列表</router-link>
+      <router-link to="/devices/deviceControlCommand">控制指令</router-link>
+      <router-link to="/devices/deviceCurrentTasks">当前状态</router-link>
+      <router-link to="/devices/deviceHistoryTasks">历史任务</router-link>
+      <router-link to="/devices/devicePerformanceAnalysis">性能分析</router-link>
+      <router-link to="/devices/deviceProfiles">设备档案</router-link>
+    </div>
+
     <div class="panel">
       <div class="panel-title">设备列表</div>
       <el-table :data="devices" stripe @row-click="onSelectDevice" highlight-current-row
-                v-loading="loading" element-loading-background="rgba(0,0,0,0.3)">
+                v-loading="loading" element-loading-background="rgba(0,0,0,0.3)" size="small">
         <el-table-column prop="code" label="设备编号" min-width="100" />
         <el-table-column prop="type" label="设备类型" min-width="90" align="center">
           <template #default="{ row }">{{ row.type === 'Crane' ? '堆垛机' : '输送线' }}</template>
         </el-table-column>
-        <el-table-column label="连接状态" min-width="90" align="center">
+        <el-table-column label="连接" min-width="70" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.isConnected ? 'success' : 'danger'" size="small">
-              {{ row.isConnected ? '在线' : '离线' }}
-            </el-tag>
+            <el-tag :type="row.isConnected ? 'success' : 'danger'" size="small">{{ row.isConnected ? '在线' : '离线' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="启用状态" min-width="90" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.isEnabled ? 'primary' : 'info'" size="small">
-              {{ row.isEnabled ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="state" label="设备状态" min-width="90" align="center">
+        <el-table-column label="状态" min-width="70" align="center">
           <template #default="{ row }">
             <span :class="row.state === 'Idle' ? 'state-idle' : 'state-busy'">{{ row.state || 'Idle' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="currentTaskNo" label="当前任务" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="lastUpdate" label="最后更新" min-width="150">
-          <template #default="{ row }">{{ formatTime(row.lastUpdate) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" min-width="100" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="row.isEnabled" size="small" type="danger" plain @click.stop="toggleDevice(row, false)">
-              禁用
-            </el-button>
-            <el-button v-else size="small" type="success" plain @click.stop="toggleDevice(row, true)">
-              启用
-            </el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <div style="padding: 40px 0; color: var(--text-muted);">暂无设备</div>
-        </template>
+        <el-table-column prop="currentTaskNo" label="当前任务" min-width="140" show-overflow-tooltip />
       </el-table>
     </div>
 
-    <div v-if="selectedDevice" class="device-detail-area">
-      <div class="detail-grid">
-        <div class="panel-detail">
-          <div class="panel-title">解析数据</div>
-          <div class="kv-list">
-            <div class="kv-row"><span class="kv-key">设备名</span><span class="kv-val accent">{{ selectedDevice.code }}</span></div>
-            <div class="kv-row"><span class="kv-key">设备类型</span><span class="kv-val">{{ selectedDevice.type === 'Crane' ? '堆垛机' : '输送线' }}</span></div>
-            <div class="kv-row"><span class="kv-key">任务号</span><span class="kv-val">{{ selectedDevice.currentTaskNo || '—' }}</span></div>
-            <div class="kv-row"><span class="kv-key">设备状态</span><span class="kv-val">{{ selectedDevice.state || 'Idle' }}</span></div>
-            <div class="kv-row"><span class="kv-key">连接状态</span><span class="kv-val" :class="selectedDevice.isConnected ? 'val-ok' : 'val-err'">{{ selectedDevice.isConnected ? '已连接' : '已断开' }}</span></div>
-            <div class="kv-row"><span class="kv-key">启用状态</span><span class="kv-val" :class="selectedDevice.isEnabled ? 'val-ok' : 'val-err'">{{ selectedDevice.isEnabled ? '启用' : '禁用' }}</span></div>
-            <div class="kv-row"><span class="kv-key">最后更新</span><span class="kv-val dim">{{ formatTime(selectedDevice.lastUpdate) }}</span></div>
-          </div>
-          <template v-if="lastParsedMessage">
-            <div class="kv-divider"></div>
-            <div class="kv-list">
-              <div class="kv-row"><span class="kv-key">指令</span><span class="kv-val">{{ lastParsedMessage.command || '—' }}</span></div>
-              <div class="kv-row"><span class="kv-key">结果</span><span class="kv-val">{{ lastParsedMessage.result || '—' }}</span></div>
-              <div class="kv-row"><span class="kv-key">方向</span><span class="kv-val" :class="lastParsedMessage.direction === '发送' ? 'val-send' : 'val-recv'">{{ lastParsedMessage.direction }}</span></div>
-              <div class="kv-row"><span class="kv-key">时间</span><span class="kv-val dim">{{ lastParsedMessage.time }}</span></div>
-            </div>
-          </template>
-        </div>
+    <div v-if="selectedDevice" class="panel" style="margin-top: 16px;">
+      <div class="panel-title">设备任务 — {{ selectedDevice.code }}
+        <span class="title-hint">（当前库 DeviceTaskEntity）</span>
+      </div>
 
-        <div class="panel">
-          <div class="panel-title">原始报文 <span class="msg-count">{{ messages.length }} 条</span></div>
-          <div class="raw-messages" ref="msgListRef">
-            <div v-for="(msg, idx) in messages" :key="idx"
-                 class="raw-msg" :class="msg.direction === '发送' ? 'msg-send' : 'msg-recv'">
-              <span class="msg-time">{{ formatShortTime(msg.timestamp) }}</span>
-              <span class="msg-dir">{{ msg.direction === '发送' ? 'TX' : 'RX' }}</span>
-              <span class="msg-data">{{ msg.rawData }}</span>
-            </div>
-            <div v-if="messages.length === 0" class="msg-empty">暂无通讯数据</div>
-          </div>
+      <div class="task-section">
+        <div class="section-label running-label">
+          <span class="section-dot running"></span>
+          运行中 / 下发中 <span class="count-badge">{{ runningTasks.length }}</span>
         </div>
+        <el-table :data="runningTasks" stripe size="small" v-loading="taskLoading"
+                  element-loading-background="rgba(0,0,0,0.3)">
+          <el-table-column prop="taskCode" label="任务号" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="stepOrder" label="步骤" min-width="50" align="center" />
+          <el-table-column prop="segmentSource" label="起点" min-width="80" align="center" />
+          <el-table-column prop="segmentDest" label="终点" min-width="80" align="center" />
+          <el-table-column prop="status" label="状态" min-width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="deviceStatusTagType(row.status)" size="small">{{ deviceStatusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="sendCount" label="发送次数" min-width="70" align="center" />
+          <el-table-column prop="createdAt" label="创建时间" min-width="140">
+            <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+          </el-table-column>
+          <template #empty>
+            <div style="padding: 20px 0; color: var(--text-muted);">暂无运行中任务</div>
+          </template>
+        </el-table>
+      </div>
+
+      <div class="task-section" style="margin-top: 16px;">
+        <div class="section-label waiting-label">
+          <span class="section-dot waiting"></span>
+          未执行 <span class="count-badge">{{ waitingTasks.length }}</span>
+        </div>
+        <el-table :data="waitingTasks" stripe size="small">
+          <el-table-column prop="taskCode" label="任务号" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="stepOrder" label="步骤" min-width="50" align="center" />
+          <el-table-column prop="segmentSource" label="起点" min-width="80" align="center" />
+          <el-table-column prop="segmentDest" label="终点" min-width="80" align="center" />
+          <el-table-column prop="status" label="状态" min-width="80" align="center">
+            <template #default="{ row }">
+              <el-tag type="info" size="small">{{ deviceStatusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="未执行原因" min-width="200">
+            <template #default="{ row }">
+              <span class="reason-text">{{ getWaitReason(row) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="创建时间" min-width="140">
+            <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+          </el-table-column>
+          <template #empty>
+            <div style="padding: 20px 0; color: var(--text-muted);">暂无待执行任务</div>
+          </template>
+        </el-table>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { deviceApi } from '../../api'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { deviceApi, deviceTaskApi } from '../../api'
 import { useSignalR } from '../../stores/signalr'
-import { ElMessage } from 'element-plus'
 
 const devices = ref([])
 const selectedDevice = ref(null)
-const messages = ref([])
+const allDeviceTasks = ref([])
 const loading = ref(false)
-const msgListRef = ref(null)
+const taskLoading = ref(false)
 const { joinGroup, leaveGroup, on, off } = useSignalR()
-let currentDeviceGroup = null
 
-const lastParsedMessage = computed(() => {
-  if (messages.value.length === 0) return null
-  const last = messages.value[messages.value.length - 1]
-  const parsed = parseRawMessage(last.rawData)
-  return { command: parsed.CMD || parsed.Cmd || '', result: parsed.TaskState || parsed.HandShake || '', direction: last.direction, time: formatTime(last.timestamp) }
-})
+const runningTasks = computed(() =>
+  allDeviceTasks.value.filter(d => ['SendingToPlc', 'Running'].includes(d.status))
+)
+const waitingTasks = computed(() =>
+  allDeviceTasks.value.filter(d => ['Waiting', 'Error'].includes(d.status))
+)
 
-watch(messages, () => { nextTick(() => { const el = msgListRef.value; if (el) el.scrollTop = el.scrollHeight }) }, { deep: true })
-
-function parseRawMessage(raw) {
-  const result = {}
-  raw.replace(/^\[?\[?/, '').replace(/\]?\]?$/, '').split(';').forEach(pair => {
-    const i = pair.indexOf('=')
-    if (i > 0) result[pair.substring(0, i).trim()] = pair.substring(i + 1).trim()
-  })
-  return result
+function getWaitReason(task) {
+  if (task.status === 'Error') return `异常: ${task.errorMessage || '未知错误'}`
+  if (task.status === 'Waiting') {
+    if (task.stepOrder > 1) return '等待前序步骤完成'
+    return '等待设备空闲或调度分配'
+  }
+  return '—'
 }
 
 async function loadDevices() {
@@ -136,26 +129,10 @@ async function loadDevices() {
 }
 
 async function onSelectDevice(row) {
-  if (currentDeviceGroup) leaveGroup(currentDeviceGroup)
   selectedDevice.value = row
-  currentDeviceGroup = `view:messages:${row.code}`
-  joinGroup(currentDeviceGroup)
-  try { messages.value = await deviceApi.getMessages(row.code) } catch (e) { console.error(e) }
-}
-
-async function toggleDevice(row, enable) {
-  try {
-    if (enable) await deviceApi.enable(row.code)
-    else await deviceApi.disable(row.code)
-    ElMessage.success(`设备 ${row.code} 已${enable ? '启用' : '禁用'}`)
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
-  }
-}
-
-function handleDeviceMessage(data) {
-  messages.value.push(data)
-  if (messages.value.length > 500) messages.value = messages.value.slice(-500)
+  taskLoading.value = true
+  try { allDeviceTasks.value = await deviceTaskApi.getByDevice(row.code) } catch (e) { console.error(e) }
+  finally { taskLoading.value = false }
 }
 
 function handleDeviceStatus(data) {
@@ -167,48 +144,48 @@ function handleDeviceStatus(data) {
   }
 }
 
+let debounceTimer = null
+function handleTasksChanged() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    if (selectedDevice.value) onSelectDevice(selectedDevice.value)
+  }, 500)
+}
+
+const deviceStatusLabel = s => ({ Waiting: '等待', SendingToPlc: '下发中', Running: '运行中', Finished: '已完成', Error: '异常' }[s] || s)
+const deviceStatusTagType = s => ({ Waiting: 'info', SendingToPlc: 'warning', Running: 'primary', Finished: 'success', Error: 'danger' }[s] || 'info')
 function formatTime(val) { return val ? new Date(val).toLocaleString('zh-CN', { hour12: false }) : '—' }
-function formatShortTime(val) { return val ? new Date(val).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' }
 
 onMounted(() => {
   loadDevices()
   joinGroup('view:devices')
-  on('DeviceMessage', handleDeviceMessage)
+  joinGroup('view:tasks')
   on('DeviceStatusUpdated', handleDeviceStatus)
+  on('TasksChanged', handleTasksChanged)
 })
 
 onUnmounted(() => {
   leaveGroup('view:devices')
-  if (currentDeviceGroup) leaveGroup(currentDeviceGroup)
-  off('DeviceMessage', handleDeviceMessage)
+  leaveGroup('view:tasks')
   off('DeviceStatusUpdated', handleDeviceStatus)
+  off('TasksChanged', handleTasksChanged)
 })
 </script>
 
 <style scoped>
-.device-detail-area { margin-top: 16px; }
-.detail-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
-.kv-list { display: flex; flex-direction: column; gap: 2px; }
-.kv-row { display: flex; align-items: center; padding: 6px 0; font-size: 12px; }
-.kv-key { width: 70px; flex-shrink: 0; color: var(--text-muted); text-align: right; padding-right: 14px; }
-.kv-val { color: var(--text-primary); }
-.kv-val.accent { color: var(--accent); font-weight: 600; }
-.kv-val.dim { color: var(--text-muted); }
-.kv-val.val-ok { color: var(--success); }
-.kv-val.val-err { color: var(--danger); }
-.kv-val.val-send { color: #f59e0b; }
-.kv-val.val-recv { color: #3b9eff; }
-.kv-divider { height: 1px; background: var(--border); margin: 10px 0; }
-.msg-count { font-size: 11px; font-weight: 400; color: var(--text-muted); margin-left: 6px; }
-.raw-messages { max-height: 420px; overflow-y: auto; font-family: var(--font-mono); font-size: 11px; background: var(--bg-deep); border-radius: 6px; padding: 6px; }
-.raw-msg { padding: 3px 8px; display: flex; gap: 8px; align-items: baseline; border-radius: 3px; line-height: 1.7; }
-.raw-msg:hover { background: rgba(255,255,255,0.02); }
-.msg-time { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
-.msg-dir { font-weight: 700; font-size: 10px; width: 20px; text-align: center; flex-shrink: 0; border-radius: 3px; padding: 1px 0; }
-.msg-recv .msg-dir { color: #3b9eff; }
-.msg-send .msg-dir { color: #f59e0b; }
-.msg-data { color: var(--text-secondary); word-break: break-all; }
-.msg-empty { color: var(--text-muted); text-align: center; padding: 40px; }
+.title-hint { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+.task-section { }
+.section-label {
+  font-size: 12px; font-weight: 600; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.section-dot { width: 8px; height: 8px; border-radius: 50%; }
+.section-dot.running { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
+.section-dot.waiting { background: var(--text-muted); }
+.running-label { color: var(--accent); }
+.waiting-label { color: var(--text-secondary); }
+.count-badge { font-size: 10px; font-weight: 400; color: var(--text-muted); }
+.reason-text { font-size: 11px; color: var(--warning); }
 .state-idle { color: var(--text-muted); }
 .state-busy { color: var(--accent); font-weight: 600; }
 </style>

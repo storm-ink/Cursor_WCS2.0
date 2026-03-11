@@ -1,11 +1,12 @@
 <template>
   <div>
     <div class="sub-tabs">
-      <router-link to="/devices/list">设备列表</router-link>
-      <router-link to="/devices/commands">控制指令</router-link>
-      <router-link to="/devices/status">当前状态</router-link>
-      <router-link to="/devices/history">历史任务</router-link>
-      <router-link to="/devices/performance">性能分析</router-link>
+      <router-link to="/devices/deviceManagement">设备列表</router-link>
+      <router-link to="/devices/deviceControlCommand">控制指令</router-link>
+      <router-link to="/devices/deviceCurrentTasks">当前状态</router-link>
+      <router-link to="/devices/deviceHistoryTasks">历史任务</router-link>
+      <router-link to="/devices/devicePerformanceAnalysis">性能分析</router-link>
+      <router-link to="/devices/deviceProfiles">设备档案</router-link>
     </div>
 
     <div class="panel">
