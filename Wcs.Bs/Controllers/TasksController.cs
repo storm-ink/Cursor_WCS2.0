@@ -12,14 +12,23 @@ namespace Wcs.Bs.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly TaskService _taskService;
+    private readonly DataArchiveService _archiveService;
     private readonly IHubContext<WcsHub> _hub;
     private readonly ILogger<TasksController> _logger;
+    private readonly DataArchiveConfig _archiveConfig;
 
-    public TasksController(TaskService taskService, IHubContext<WcsHub> hub, ILogger<TasksController> logger)
+    public TasksController(
+        TaskService taskService,
+        DataArchiveService archiveService,
+        IHubContext<WcsHub> hub,
+        ILogger<TasksController> logger,
+        IConfiguration configuration)
     {
         _taskService = taskService;
+        _archiveService = archiveService;
         _hub = hub;
         _logger = logger;
+        _archiveConfig = configuration.GetSection("DataArchive").Get<DataArchiveConfig>() ?? new DataArchiveConfig();
     }
 
     [HttpGet]
@@ -91,6 +100,81 @@ public class TasksController : ControllerBase
         if (retainDays < 1) retainDays = 1;
         var count = await _taskService.CleanupOldTasksAsync(retainDays);
         return Ok(new { removed = count, retainDays });
+    }
+
+    /// <summary>
+    /// 手动触发归档：将当前库中已完成/已取消的旧任务归档到历史库和备份库
+    /// </summary>
+    [HttpPost("archive")]
+    public async Task<IActionResult> Archive([FromQuery] int retainDays = 30)
+    {
+        if (retainDays < 1) retainDays = 1;
+        try
+        {
+            var count = await _archiveService.ArchiveOldTasksAsync(retainDays);
+            _logger.LogInformation("[API] Archived {Count} tasks (retainDays={Days})", count, retainDays);
+            await NotifyTasksChanged();
+            return Ok(new { archived = count, retainDays });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[API] Archive failed");
+            return StatusCode(500, new { error = "归档操作失败: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 重置当前表数据库（需在配置中启用 EnableCurrentReset）
+    /// </summary>
+    [HttpPost("reset/current")]
+    public async Task<IActionResult> ResetCurrentDatabase()
+    {
+        if (!_archiveConfig.EnableCurrentReset)
+            return BadRequest(new { error = "当前表重置未启用，请在配置中设置 DataArchive:EnableCurrentReset = true" });
+
+        try
+        {
+            await _archiveService.ResetCurrentDatabaseAsync();
+            _logger.LogWarning("[API] Current database reset by user");
+            await NotifyTasksChanged();
+            return Ok(new { message = "当前表数据库已重置" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[API] Current database reset failed");
+            return StatusCode(500, new { error = "重置当前表失败: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 重置历史表数据库（需在配置中启用 EnableHistoryReset）
+    /// </summary>
+    [HttpPost("reset/history")]
+    public async Task<IActionResult> ResetHistoryDatabase()
+    {
+        if (!_archiveConfig.EnableHistoryReset)
+            return BadRequest(new { error = "历史表重置未启用，请在配置中设置 DataArchive:EnableHistoryReset = true" });
+
+        try
+        {
+            await _archiveService.ResetHistoryDatabaseAsync();
+            _logger.LogWarning("[API] History database reset by user");
+            return Ok(new { message = "历史表数据库已重置" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[API] History database reset failed");
+            return StatusCode(500, new { error = "重置历史表失败: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 获取当前归档配置
+    /// </summary>
+    [HttpGet("archive/config")]
+    public IActionResult GetArchiveConfig()
+    {
+        return Ok(_archiveConfig);
     }
 
     private async Task NotifyTasksChanged()

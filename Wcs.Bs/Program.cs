@@ -17,8 +17,17 @@ builder.Host.UseSerilog();
 builder.Services.AddDbContext<WcsDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// 历史表数据库
+builder.Services.AddDbContext<WcsHistoryDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("HistoryConnection")));
+
+// 备份表数据库
+builder.Services.AddDbContext<WcsBackupDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("BackupConnection")));
+
 builder.Services.AddScoped<PathConfigService>();
 builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<DataArchiveService>();
 builder.Services.AddSingleton<DeviceService>();
 builder.Services.AddHostedService<PlcDispatchService>();
 builder.Services.AddHostedService<DataCleanupService>();
@@ -56,6 +65,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<WcsDbContext>();
     db.Database.EnsureCreated();
+
+    // 确保历史库和备份库也被创建
+    var historyDb = scope.ServiceProvider.GetRequiredService<WcsHistoryDbContext>();
+    historyDb.Database.EnsureCreated();
+
+    var backupDb = scope.ServiceProvider.GetRequiredService<WcsBackupDbContext>();
+    backupDb.Database.EnsureCreated();
 
     var pathConfigService = scope.ServiceProvider.GetRequiredService<PathConfigService>();
     var configPath = builder.Configuration["PathConfig:JsonPath"] ?? "Config/paths.json";
