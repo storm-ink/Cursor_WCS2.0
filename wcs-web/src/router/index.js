@@ -13,8 +13,13 @@ const routes = [
   {
     path: '/tasks',
     name: 'Tasks',
-    redirect: '/tasks/current',
+    redirect: '/tasks/board',
     children: [
+      {
+        path: 'board',
+        name: 'TaskBoard',
+        component: () => import('../views/tasks/TaskBoard.vue')
+      },
       {
         path: 'current',
         name: 'CurrentTasks',
@@ -35,7 +40,34 @@ const routes = [
   {
     path: '/devices',
     name: 'Devices',
-    component: () => import('../views/DeviceManagement.vue')
+    redirect: '/devices/list',
+    children: [
+      {
+        path: 'list',
+        name: 'DeviceList',
+        component: () => import('../views/devices/DeviceList.vue')
+      },
+      {
+        path: 'commands',
+        name: 'ControlCommands',
+        component: () => import('../views/devices/ControlCommands.vue')
+      },
+      {
+        path: 'status',
+        name: 'DeviceStatus',
+        component: () => import('../views/devices/DeviceStatus.vue')
+      },
+      {
+        path: 'history',
+        name: 'DeviceHistory',
+        component: () => import('../views/devices/DeviceHistory.vue')
+      },
+      {
+        path: 'performance',
+        name: 'DevicePerformance',
+        component: () => import('../views/devices/DevicePerformance.vue')
+      }
+    ]
   },
   {
     path: '/logs',

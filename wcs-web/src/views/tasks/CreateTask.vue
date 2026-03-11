@@ -1,6 +1,7 @@
 <template>
   <div>
     <div class="sub-tabs">
+      <router-link to="/tasks/board">任务看板</router-link>
       <router-link to="/tasks/current">当前任务</router-link>
       <router-link to="/tasks/history">历史任务</router-link>
       <router-link to="/tasks/create">手动下任务</router-link>
