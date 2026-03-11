@@ -1,9 +1,12 @@
 <template>
   <div>
     <div class="sub-tabs">
-      <router-link to="/tasks/current">当前任务</router-link>
+      <router-link to="/tasks/taskboard">任务看板</router-link>
+      <router-link to="/tasks/current">任务更改</router-link>
       <router-link to="/tasks/history">历史任务</router-link>
-      <router-link to="/tasks/create">手动下任务</router-link>
+      <router-link to="/tasks/create">手动任务</router-link>
+      <router-link to="/tasks/changeTaskMode">切换模式</router-link>
+
     </div>
 
     <div class="panel create-panel">

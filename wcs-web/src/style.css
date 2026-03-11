@@ -46,7 +46,7 @@ html, body, #app {
 }
 
 .app-header .logo {
-  font-size: 16px; font-weight: 700;
+  font-size: 25px; font-weight: 700;
   color: var(--accent);
   display: flex; align-items: center; gap: 10px;
   white-space: nowrap;
@@ -58,15 +58,17 @@ html, body, #app {
   border-left: 1px solid var(--border);
 }
 
-.app-nav { display: flex; align-items: center; gap: 2px; }
+.app-nav { display: flex; align-items: center; gap: 2px;  width: 100%; }
 .app-nav a {
+    flex: 1; 
   color: var(--text-secondary);
   text-decoration: none;
   padding: 7px 16px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 30px;
   transition: all 0.15s;
   display: flex; align-items: center; gap: 5px;
+   text-align: center;
 }
 .app-nav a:hover { color: var(--text-primary); background: var(--accent-dim); }
 .app-nav a.router-link-active,
@@ -80,7 +82,7 @@ html, body, #app {
   font-size: 11px; color: var(--text-muted);
 }
 .connection-status .dot {
-  width: 7px; height: 7px; border-radius: 50%;
+  width: 15px; height: 15px; border-radius: 50%;
   background: var(--danger);
   transition: all 0.3s;
 }
@@ -99,16 +101,19 @@ html, body, #app {
   padding: 3px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  width: fit-content;
+  /* width: fit-content; */
+  flex: 1; /* 让容器先占满 */
 }
 .sub-tabs a {
+  flex: 1; /* ← 添加这行，核心：让每个链接均分空间 */
   color: var(--text-muted);
   text-decoration: none;
   padding: 6px 20px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
   transition: all 0.15s;
+  text-align: center;
 }
 .sub-tabs a:hover { color: var(--text-primary); }
 .sub-tabs a.router-link-exact-active {
@@ -268,3 +273,17 @@ html, body, #app {
 
 /* Input Number */
 .el-input-number { --el-input-number-bg-color: var(--bg-base); }
+
+
+:root {
+  /* 原来的颜色可能是灰色或透明的 */
+  /* --bg-hover: #f5f5f5; */
+
+  /* 修改成深蓝色 */
+  --bg-hover: #435261; 
+}
+/* 强制指定选中行的颜色 */
+.el-table__body tr.current-row > td {
+  background-color: #23486b !important; /* 你的颜色 */
+}
+

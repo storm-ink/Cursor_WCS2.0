@@ -1,9 +1,12 @@
 <template>
   <div>
     <div class="sub-tabs">
-      <router-link to="/tasks/current">当前任务</router-link>
+      <router-link to="/tasks/taskboard">任务看板</router-link>
+      <router-link to="/tasks/current">任务更改</router-link>
       <router-link to="/tasks/history">历史任务</router-link>
-      <router-link to="/tasks/create">手动下任务</router-link>
+      <router-link to="/tasks/create">手动任务</router-link>
+      <router-link to="/tasks/changeTaskMode">切换模式</router-link>
+
     </div>
 
     <div class="panel">
@@ -40,7 +43,7 @@
         </el-form>
       </div>
 
-      <el-table :data="tasks" stripe v-loading="loading" element-loading-background="rgba(0,0,0,0.3)">
+      <el-table :data="tasks"  v-loading="loading" element-loading-background="rgba(0,0,0,0.3)">
         <el-table-column prop="taskCode" label="任务编号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="source" label="来源" min-width="70" align="center">
           <template #default="{ row }">{{ sourceLabel(row.source) }}</template>

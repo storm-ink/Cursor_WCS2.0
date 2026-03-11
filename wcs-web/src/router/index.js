@@ -3,17 +3,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: '/monitor3d'
-  },
-  {
-    path: '/monitor3d',
-    name: 'Monitor3D',
-    component: () => import('../views/Monitor3D.vue')
+    redirect: '/tasks/taskboard'
   },
   {
     path: '/tasks',
     name: 'Tasks',
-    redirect: '/tasks/current',
+    redirect: '/tasks/taskboard',
     children: [
       {
         path: 'current',
@@ -30,17 +25,71 @@ const routes = [
         name: 'CreateTask',
         component: () => import('../views/tasks/CreateTask.vue')
       }
+      ,
+      {
+        path: 'changeTaskMode',
+        name: 'ChangeTaskMode',
+        component: () => import('../views/tasks/ChangeTaskMode.vue')
+      }
+      ,
+      {
+        path: 'taskboard',
+        name: 'TaskBoard',
+        component: () => import('../views/tasks/TaskBoard.vue')
+      }
     ]
   },
   {
     path: '/devices',
     name: 'Devices',
-    component: () => import('../views/DeviceManagement.vue')
+    redirect: '/devices/deviceManagement',
+    children: [
+      {
+        path: 'deviceManagement',
+        name: 'DeviceManagement',
+        component: () => import('../views/devices/DeviceManagement.vue')
+      },
+      {
+        path: 'deviceControlCommand',
+        name: 'DeviceControlCommand',
+        component: () => import('../views/devices/DeviceControlCommand.vue')
+      }
+      ,
+      {
+        path: 'deviceCurrentTasks',
+        name: 'DeviceCurrentTasks',
+        component: () => import('../views/devices/DeviceCurrentTasks.vue')
+      },
+      {
+        path: 'deviceHistoryTasks',
+        name: 'DeviceHistoryTasks',
+        component: () => import('../views/devices/DeviceHistoryTasks.vue')
+      }
+      ,
+      {
+        path: 'devicePerformanceAnalysis',
+        name: 'DevicePerformanceAnalysis',
+        component: () => import('../views/devices/DevicePerformanceAnalysis.vue')
+      }
+      ,
+      {
+        path: 'deviceProfiles',
+        name: 'DeviceProfiles',
+        component: () => import('../views/devices/DeviceProfiles.vue')
+      }
+      
+      
+    ]
   },
   {
     path: '/logs',
     name: 'Logs',
     component: () => import('../views/LogView.vue')
+  },
+  {
+    path: '/monitor3d',
+    name: 'Monitor3D',
+    component: () => import('../views/Monitor3D.vue')
   }
 ]
 

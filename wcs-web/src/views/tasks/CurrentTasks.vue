@@ -1,15 +1,18 @@
 <template>
   <div>
-    <div class="sub-tabs">
-      <router-link to="/tasks/current">当前任务</router-link>
+     <div class="sub-tabs">
+      <router-link to="/tasks/taskboard">任务看板</router-link>
+      <router-link to="/tasks/current">任务更改</router-link>
       <router-link to="/tasks/history">历史任务</router-link>
-      <router-link to="/tasks/create">手动下任务</router-link>
+      <router-link to="/tasks/create">手动任务</router-link>
+      <router-link to="/tasks/changeTaskMode">切换模式</router-link>
+
     </div>
 
     <div class="panel">
       <div class="panel-title">当前任务列表</div>
-      <el-table :data="tasks" stripe @row-click="onRowClick" highlight-current-row
-                v-loading="loading" element-loading-background="rgba(0,0,0,0.3)">
+      <el-table :data="tasks"  @row-click="onRowClick" highlight-current-row  
+                v-loading="loading" element-loading-background="rgba(0,1.0,0.6,0.6)">
         <el-table-column prop="taskCode" label="任务编号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="source" label="来源" min-width="70" align="center">
           <template #default="{ row }">{{ sourceLabel(row.source) }}</template>
@@ -55,10 +58,10 @@
         </template>
       </el-table>
     </div>
-
-    <div v-if="selectedTask" class="panel-detail">
+  <transition name="slide-up">
+    <div v-if="selectedTask" class="panel-detail" >
       <div class="panel-title">设备任务明细 — {{ selectedTask.taskCode }}</div>
-      <el-table :data="deviceTasks" stripe v-loading="detailLoading" element-loading-background="rgba(0,0,0,0.3)">
+      <el-table :data="deviceTasks"  v-loading="detailLoading" element-loading-background="rgba(0,0,0,0.3)">
         <el-table-column prop="stepOrder" label="步骤" min-width="50" align="center" />
         <el-table-column prop="deviceType" label="设备类型" min-width="90" align="center">
           <template #default="{ row }">{{ deviceTypeLabel(row.deviceType) }}</template>
@@ -81,6 +84,7 @@
         </template>
       </el-table>
     </div>
+    </transition>
   </div>
 </template>
 
@@ -104,6 +108,17 @@ async function loadTasks() {
 }
 
 async function onRowClick(row) {
+  
+  if (selectedTask.value && selectedTask.value.taskCode === row.taskCode) {
+    // 清空选中状态，这会触发 panel-detail 的 v-if 变为 false，从而收起
+    selectedTask.value = null;
+     detailLoading.value = false;
+     deviceTasks.value = [];
+    // 不需要继续执行后面的加载逻辑了
+    return;
+  }
+
+  
   selectedTask.value = row
   detailLoading.value = true
   try { deviceTasks.value = await taskApi.getDeviceTasks(row.taskCode) } catch (e) { console.error(e) }
@@ -170,4 +185,37 @@ onUnmounted(() => {
 .type-inbound { color: #4ade80; }
 .type-outbound { color: #f97316; }
 .type-transfer { color: #a78bfa; }
+</style>
+
+
+
+<style scoped>
+/* 定义过渡动画的属性 */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease-out; /* 0.3秒的动画时长，ease-out 让结束更柔和 */
+  transform: translateY(0); /* 最终状态：在正常位置 */
+}
+
+/* 定义进入时的初始状态 (离开时的结束状态) */
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%); /* 初始状态：在屏幕底部以下 (隐藏) */
+  opacity: 0; /* 同时可以加一个透明度变化 */
+}
+
+/* 基础样式：确保 div 固定在底部 */
+.panel-detail {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  /* 其他样式如 background, margin 等 */
+  background: #1a2d4d;
+  margin: 10px;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+   z-index: 9999; 
+  /* 注意：不要在这里写 transition，要写在上面的 enter/leave 类里 */
+}
 </style>
