@@ -189,11 +189,16 @@ public class DataArchiveService
             return;
         }
 
+        // 批量查询已存在的 TaskCode，避免 N+1 查询
+        var taskCodes = tasks.Select(t => t.TaskCode).ToList();
+        var existingTaskCodes = await targetTasks
+            .Where(t => taskCodes.Contains(t.TaskCode))
+            .Select(t => t.TaskCode)
+            .ToHashSetAsync();
+
         foreach (var task in tasks)
         {
-            // 检查是否已存在（避免重复归档）
-            var exists = await targetTasks.AnyAsync(t => t.TaskCode == task.TaskCode);
-            if (exists) continue;
+            if (existingTaskCodes.Contains(task.TaskCode)) continue;
 
             targetTasks.Add(new TaskEntity
             {
@@ -223,14 +228,20 @@ public class DataArchiveService
 
         await targetDb.SaveChangesAsync();
 
-        // 归档设备任务
+        // 批量查询已存在的设备任务，避免 N+1 查询
         var archivedTaskIds = tasks.Select(t => t.Id).ToHashSet();
+        var existingDeviceTaskKeys = await targetDeviceTasks
+            .Where(d => archivedTaskIds.Contains(d.TaskId))
+            .Select(d => new { d.TaskId, d.StepOrder })
+            .ToListAsync();
+        var existingDeviceTaskSet = existingDeviceTaskKeys
+            .Select(k => (k.TaskId, k.StepOrder))
+            .ToHashSet();
+
         foreach (var dt in deviceTasks)
         {
             if (!archivedTaskIds.Contains(dt.TaskId)) continue;
-
-            var exists = await targetDeviceTasks.AnyAsync(d => d.TaskId == dt.TaskId && d.StepOrder == dt.StepOrder);
-            if (exists) continue;
+            if (existingDeviceTaskSet.Contains((dt.TaskId, dt.StepOrder))) continue;
 
             targetDeviceTasks.Add(new DeviceTaskEntity
             {
