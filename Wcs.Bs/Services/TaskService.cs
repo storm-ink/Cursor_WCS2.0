@@ -10,6 +10,7 @@ namespace Wcs.Bs.Services;
 public class TaskService
 {
     private readonly WcsDbContext _db;
+    private readonly WcsHistoryDbContext _historyDb;
     private readonly PathConfigService _pathService;
     private readonly ILogger<TaskService> _logger;
     private readonly PipelineConfig _pipelineConfig;
@@ -17,12 +18,14 @@ public class TaskService
 
     public TaskService(
         WcsDbContext db,
+        WcsHistoryDbContext historyDb,
         PathConfigService pathService,
         ILogger<TaskService> logger,
         IServiceProvider serviceProvider,
         IConfiguration configuration)
     {
         _db = db;
+        _historyDb = historyDb;
         _pathService = pathService;
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -283,6 +286,124 @@ public class TaskService
         return await _db.DeviceTasks
             .Where(d => d.TaskCode == taskCode)
             .OrderBy(d => d.StepOrder)
+            .ToListAsync();
+    }
+
+    // ── 手动完成任务 ──
+    public async Task<string?> CompleteTaskAsync(long taskId)
+    {
+        var task = await _db.Tasks.FindAsync(taskId);
+        if (task == null) return "任务不存在";
+        if (task.Status == TaskStatus.Finished) return "任务已完成";
+        if (task.Status == TaskStatus.Cancelled) return "任务已取消，无法完成";
+
+        task.Status = TaskStatus.Finished;
+        task.FinishedAt = DateTime.Now;
+
+        var deviceTasks = await _db.DeviceTasks
+            .Where(d => d.TaskId == taskId && d.Status != DeviceTaskStatus.Finished)
+            .ToListAsync();
+        foreach (var dt in deviceTasks)
+        {
+            dt.Status = DeviceTaskStatus.Finished;
+            dt.FinishedAt = DateTime.Now;
+        }
+
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("[Task] Task {TaskCode} manually completed", task.TaskCode);
+        return null;
+    }
+
+    // ── 设备任务操作 ──
+    public async Task<string?> ResendDeviceTaskAsync(long deviceTaskId)
+    {
+        var dt = await _db.DeviceTasks.FindAsync(deviceTaskId);
+        if (dt == null) return "设备任务不存在";
+        if (dt.Status == DeviceTaskStatus.Finished) return "设备任务已完成";
+
+        dt.Status = DeviceTaskStatus.Waiting;
+        dt.SendCount = 0;
+        dt.ErrorMessage = null;
+        dt.FinishedAt = null;
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("[Task] Device task {Id} resend for {TaskCode}", deviceTaskId, dt.TaskCode);
+        return null;
+    }
+
+    public async Task<string?> CancelDeviceTaskAsync(long deviceTaskId)
+    {
+        var dt = await _db.DeviceTasks.FindAsync(deviceTaskId);
+        if (dt == null) return "设备任务不存在";
+        if (dt.Status == DeviceTaskStatus.Finished) return "设备任务已完成，无法取消";
+
+        dt.Status = DeviceTaskStatus.Error;
+        dt.ErrorMessage = "手动取消";
+        dt.FinishedAt = DateTime.Now;
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("[Task] Device task {Id} cancelled for {TaskCode}", deviceTaskId, dt.TaskCode);
+        return null;
+    }
+
+    public async Task<string?> CompleteDeviceTaskAsync(long deviceTaskId)
+    {
+        var dt = await _db.DeviceTasks.Include(d => d.Task).FirstOrDefaultAsync(d => d.Id == deviceTaskId);
+        if (dt == null) return "设备任务不存在";
+        if (dt.Status == DeviceTaskStatus.Finished) return "设备任务已完成";
+
+        await OnDeviceTaskCompletedAsync(deviceTaskId);
+        _logger.LogInformation("[Task] Device task {Id} manually completed for {TaskCode}", deviceTaskId, dt.TaskCode);
+        return null;
+    }
+
+    // ── 按设备查询当前设备任务 ──
+    public async Task<List<DeviceTaskEntity>> GetDeviceTasksByDeviceAsync(string deviceCode)
+    {
+        return await _db.DeviceTasks
+            .Where(d => d.DeviceCode == deviceCode)
+            .OrderByDescending(d => d.CreatedAt)
+            .ToListAsync();
+    }
+
+    // ── 历史任务查询（从历史库，仅已完成/已取消） ──
+    public async Task<(List<TaskEntity> Items, int Total)> GetHistoryTasksFromArchiveAsync(
+        DateTime? startDate, DateTime? endDate, TaskStatus? status, TaskType? type, int page = 1, int pageSize = 20)
+    {
+        var query = _historyDb.Tasks.AsQueryable();
+        if (startDate.HasValue) query = query.Where(t => t.CreatedAt >= startDate.Value);
+        if (endDate.HasValue) query = query.Where(t => t.CreatedAt <= endDate.Value);
+        if (status.HasValue) query = query.Where(t => t.Status == status.Value);
+        if (type.HasValue) query = query.Where(t => t.Type == type.Value);
+
+        // 只显示已完成和已取消的任务
+        query = query.Where(t => t.Status == TaskStatus.Finished || t.Status == TaskStatus.Cancelled);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, total);
+    }
+
+    // ── 历史设备任务查询（从历史库） ──
+    public async Task<List<DeviceTaskEntity>> GetHistoryDeviceTasksAsync(string taskCode)
+    {
+        return await _historyDb.DeviceTasks
+            .Where(d => d.TaskCode == taskCode)
+            .OrderBy(d => d.StepOrder)
+            .ToListAsync();
+    }
+
+    // ── 按设备查询历史设备任务（从历史库） ──
+    public async Task<List<DeviceTaskEntity>> GetHistoryDeviceTasksByDeviceAsync(string deviceCode)
+    {
+        return await _historyDb.DeviceTasks
+            .Where(d => d.DeviceCode == deviceCode &&
+                   (d.Status == DeviceTaskStatus.Finished || d.Status == DeviceTaskStatus.Error))
+            .OrderByDescending(d => d.CreatedAt)
+            .Take(200)
             .ToListAsync();
     }
 

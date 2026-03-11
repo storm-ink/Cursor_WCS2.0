@@ -94,6 +94,33 @@ public class TasksController : ControllerBase
         return Ok(new { message = "任务已重试" });
     }
 
+    /// <summary>
+    /// 手动完成任务
+    /// </summary>
+    [HttpPost("{id}/complete")]
+    public async Task<IActionResult> CompleteTask(long id)
+    {
+        var error = await _taskService.CompleteTaskAsync(id);
+        if (error != null) return BadRequest(new { error });
+        await NotifyTasksChanged();
+        return Ok(new { message = "任务已完成" });
+    }
+
+    /// <summary>
+    /// 从历史库查询历史任务（仅已完成/已取消）
+    /// </summary>
+    [HttpGet("history/archive")]
+    public async Task<IActionResult> GetHistoryArchive(
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate,
+        [FromQuery] TaskStatus? status, [FromQuery] TaskType? type,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 20;
+        var (items, total) = await _taskService.GetHistoryTasksFromArchiveAsync(startDate, endDate, status, type, page, pageSize);
+        return Ok(new { items, total, page, pageSize });
+    }
+
     [HttpDelete("cleanup")]
     public async Task<IActionResult> Cleanup([FromQuery] int retainDays = 30)
     {
