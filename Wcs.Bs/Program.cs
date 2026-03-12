@@ -1,10 +1,8 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using Wcs.Bs.Domain;
 using Wcs.Bs.Hubs;
 using Wcs.Bs.Infrastructure;
 using Wcs.Bs.Services;
@@ -85,42 +83,8 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<WcsDbContext>();
-    db.Database.EnsureCreated();
-
-    // 确保历史库和备份库也被创建
-    var historyDb = scope.ServiceProvider.GetRequiredService<WcsHistoryDbContext>();
-    historyDb.Database.EnsureCreated();
-
-    var backupDb = scope.ServiceProvider.GetRequiredService<WcsBackupDbContext>();
-    backupDb.Database.EnsureCreated();
-
-    var pathConfigService = scope.ServiceProvider.GetRequiredService<PathConfigService>();
-    var configPath = builder.Configuration["PathConfig:JsonPath"] ?? "Config/paths.json";
-    await pathConfigService.ImportFromFileAsync(configPath);
-
-    var deviceService = scope.ServiceProvider.GetRequiredService<DeviceService>();
-    var devices = builder.Configuration.GetSection("Devices").Get<List<DeviceConfig>>() ?? new();
-    foreach (var device in devices)
-    {
-        deviceService.RegisterDevice(device);
-    }
-
-    // 初始化默认用户
-    var hasher = new PasswordHasher<string>();
-    var seedUsers = new[]
-    {
-        new UserEntity { Username = "admin", Role = "admin", PasswordHash = hasher.HashPassword("admin", "Sineva@123"), CreatedAt = DateTime.UtcNow },
-        new UserEntity { Username = "user",  Role = "user",  PasswordHash = hasher.HashPassword("user",  "user@123"),   CreatedAt = DateTime.UtcNow }
-    };
-    foreach (var seedUser in seedUsers)
-    {
-        if (!db.Users.Any(u => u.Username == seedUser.Username))
-        {
-            db.Users.Add(seedUser);
-        }
-    }
-    db.SaveChanges();
+    var initLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DatabaseInitializer.InitializeAsync(scope.ServiceProvider, builder.Configuration, initLogger);
 }
 
 Log.Logger = new LoggerConfiguration()

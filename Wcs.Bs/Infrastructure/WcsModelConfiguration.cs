@@ -36,10 +36,5 @@ public static class WcsModelConfiguration
         {
             entity.HasIndex(e => e.DeviceCode);
         });
-
-        modelBuilder.Entity<UserEntity>(entity =>
-        {
-            entity.HasIndex(e => e.Username).IsUnique();
-        });
     }
 }

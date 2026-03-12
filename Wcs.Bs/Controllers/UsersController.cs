@@ -54,7 +54,7 @@ public class UsersController : ControllerBase
             Username = request.Username,
             PasswordHash = _hasher.HashPassword(request.Username, request.Password),
             Role = request.Role,
-            CreatedAt = DateTime.Now
+            CreatedAt = DateTime.UtcNow
         };
 
         _db.Users.Add(user);

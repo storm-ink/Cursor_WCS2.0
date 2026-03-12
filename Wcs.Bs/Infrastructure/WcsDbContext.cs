@@ -16,5 +16,11 @@ public class WcsDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         WcsModelConfiguration.Configure(modelBuilder);
+
+        // UserEntity 仅属于主库，历史库/备份库不需要 Users 表
+        modelBuilder.Entity<UserEntity>(entity =>
+        {
+            entity.HasIndex(e => e.Username).IsUnique();
+        });
     }
 }
