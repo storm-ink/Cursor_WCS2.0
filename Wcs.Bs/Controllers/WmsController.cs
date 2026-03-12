@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wcs.Bs.Domain;
 using Wcs.Bs.Services;
@@ -6,6 +7,7 @@ namespace Wcs.Bs.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "admin,user")]
 public class WmsController : ControllerBase
 {
     private readonly TaskService _taskService;

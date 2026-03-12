@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Wcs.Bs.Domain;
@@ -9,6 +10,7 @@ namespace Wcs.Bs.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class TasksController : ControllerBase
 {
     private readonly TaskService _taskService;
@@ -52,6 +54,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "admin,user")]
     public async Task<IActionResult> CreateTask([FromBody] CreateTaskRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.PalletCode))
@@ -77,6 +80,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost("{id}/cancel")]
+    [Authorize(Roles = "admin,user")]
     public async Task<IActionResult> CancelTask(long id)
     {
         var error = await _taskService.CancelTaskAsync(id);
@@ -86,6 +90,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpPost("{id}/retry")]
+    [Authorize(Roles = "admin,user")]
     public async Task<IActionResult> RetryTask(long id)
     {
         var error = await _taskService.RetryTaskAsync(id);
@@ -98,6 +103,7 @@ public class TasksController : ControllerBase
     /// 手动完成任务
     /// </summary>
     [HttpPost("{id}/complete")]
+    [Authorize(Roles = "admin,user")]
     public async Task<IActionResult> CompleteTask(long id)
     {
         var error = await _taskService.CompleteTaskAsync(id);
@@ -122,6 +128,7 @@ public class TasksController : ControllerBase
     }
 
     [HttpDelete("cleanup")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Cleanup([FromQuery] int retainDays = 30)
     {
         if (retainDays < 1) retainDays = 1;
@@ -133,6 +140,7 @@ public class TasksController : ControllerBase
     /// 手动触发归档：将当前库中已完成/已取消的旧任务归档到历史库和备份库
     /// </summary>
     [HttpPost("archive")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Archive([FromQuery] int retainDays = 30)
     {
         if (retainDays < 1) retainDays = 1;
@@ -154,6 +162,7 @@ public class TasksController : ControllerBase
     /// 重置当前表数据库（需在配置中启用 EnableCurrentReset）
     /// </summary>
     [HttpPost("reset/current")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> ResetCurrentDatabase()
     {
         if (!_archiveConfig.EnableCurrentReset)
@@ -177,6 +186,7 @@ public class TasksController : ControllerBase
     /// 重置历史表数据库（需在配置中启用 EnableHistoryReset）
     /// </summary>
     [HttpPost("reset/history")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> ResetHistoryDatabase()
     {
         if (!_archiveConfig.EnableHistoryReset)

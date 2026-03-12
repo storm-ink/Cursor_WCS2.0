@@ -1,6 +1,8 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using Wcs.Bs.Domain;
 using Wcs.Bs.Hubs;
 using Wcs.Bs.Infrastructure;
 using Wcs.Bs.Services;
@@ -37,6 +39,24 @@ builder.Services.AddScoped<IDeviceTaskDispatchFilter, DefaultDispatchFilter>();
 builder.Services.AddScoped<IDeviceTaskCompletedHandler, DefaultDeviceTaskCompletedHandler>();
 builder.Services.AddScoped<ITaskCompletedHandler, DefaultTaskCompletedHandler>();
 
+// JWT Authentication
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+builder.Services.AddAuthorization();
+
 builder.Services.AddSignalR();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -63,26 +83,8 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<WcsDbContext>();
-    db.Database.EnsureCreated();
-
-    // 确保历史库和备份库也被创建
-    var historyDb = scope.ServiceProvider.GetRequiredService<WcsHistoryDbContext>();
-    historyDb.Database.EnsureCreated();
-
-    var backupDb = scope.ServiceProvider.GetRequiredService<WcsBackupDbContext>();
-    backupDb.Database.EnsureCreated();
-
-    var pathConfigService = scope.ServiceProvider.GetRequiredService<PathConfigService>();
-    var configPath = builder.Configuration["PathConfig:JsonPath"] ?? "Config/paths.json";
-    await pathConfigService.ImportFromFileAsync(configPath);
-
-    var deviceService = scope.ServiceProvider.GetRequiredService<DeviceService>();
-    var devices = builder.Configuration.GetSection("Devices").Get<List<DeviceConfig>>() ?? new();
-    foreach (var device in devices)
-    {
-        deviceService.RegisterDevice(device);
-    }
+    var initLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DatabaseInitializer.InitializeAsync(scope.ServiceProvider, builder.Configuration, initLogger);
 }
 
 Log.Logger = new LoggerConfiguration()
@@ -91,6 +93,8 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
